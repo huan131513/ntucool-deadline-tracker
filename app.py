@@ -4,16 +4,17 @@ NTUCOOL Deadline Dashboard — a tiny local web UI on top of main.py.
 
 Run it: python3 app.py, then open http://localhost:5050
 Click "重新整理" to trigger a fresh Canvas fetch (reads your Chrome cookie,
-same as the scheduled main.py run) and see the result on the page.
+same as the scheduled main.py run); click "發送 Telegram 通知" to run the
+same threshold check the hourly job does, on demand. Both update the page
+in place via fetch() — no full reload.
 
 Only meant to run on your own machine — it reads your local Chrome's cookie
 store, same constraint as main.py's "chrome" auth mode.
 """
 import json
-import os
 from datetime import datetime, timezone
 
-from flask import Flask, flash, redirect, render_template_string, url_for
+from flask import Flask, render_template_string
 
 from main import (
     BASE_DIR,
@@ -26,9 +27,6 @@ from main import (
 )
 
 app = Flask(__name__)
-# Only used to sign the flash-message cookie; the server only ever binds to
-# 127.0.0.1, so a random per-process key is fine — no persistence needed.
-app.secret_key = os.urandom(24)
 DATA_PATH = BASE_DIR / "dashboard_data.json"
 
 
@@ -55,12 +53,7 @@ def do_refresh():
         items, _now = collect_upcoming_assignments(cfg)
         exams, hints = collect_exams(cfg)
     except (ConfigError, AuthError) as e:
-        snapshot = {
-            **prev,
-            "last_refresh": now_str,
-            "ok": False,
-            "error": str(e),
-        }
+        snapshot = {**prev, "last_refresh": now_str, "ok": False, "error": str(e)}
         save_snapshot(snapshot)
         return snapshot
 
@@ -111,41 +104,6 @@ def do_refresh():
     return snapshot
 
 
-@app.route("/")
-def index():
-    snapshot = load_snapshot()
-    return render_template_string(TEMPLATE, **build_view(snapshot))
-
-
-@app.route("/refresh", methods=["POST"])
-def refresh():
-    snapshot = do_refresh()
-    if snapshot.get("ok"):
-        flash("已重新抓取 Canvas 資料。", "ok")
-    else:
-        flash(f"抓取失敗:{snapshot.get('error')}", "bad")
-    return redirect(url_for("index"))
-
-
-@app.route("/notify", methods=["POST"])
-def notify():
-    try:
-        cfg = load_config()
-        result = run_notification_check(cfg)
-    except (ConfigError, AuthError) as e:
-        flash(f"檢查失敗:{e}", "bad")
-        return redirect(url_for("index"))
-
-    if result["sent"]:
-        names = "、".join(f"{s['course']}《{s['name']}》" for s in result["sent"])
-        flash(f"已發送 {len(result['sent'])} 則 Telegram 提醒:{names}", "ok")
-    elif result["failed"]:
-        flash(f"{len(result['failed'])} 則提醒發送失敗,下次會重試。", "bad")
-    else:
-        flash("目前沒有進入提醒門檻、且尚未通知過的項目。", "ok")
-    return redirect(url_for("index"))
-
-
 KIND_LABEL = {"quiz": "測驗", "event": "行事曆", "new_quiz": "測驗"}
 
 
@@ -185,11 +143,15 @@ def _urgency_rows(entries):
     return rows
 
 
-def build_view(snapshot):
+def build_view(snapshot, message=None):
+    """Everything the CONTENT_TEMPLATE needs to render. `message` is an
+    optional one-off {"text","category"} shown at the top — set by the
+    /api/* routes, never persisted, so it naturally disappears on the next
+    render instead of needing session/flash machinery."""
     if snapshot is None:
         return {
             "has_data": False, "ok": None, "error": None, "last_refresh": None,
-            "rows": [], "exam_rows": [], "hints": [],
+            "rows": [], "exam_rows": [], "hints": [], "message": message,
         }
 
     last_refresh = snapshot.get("last_refresh")
@@ -214,10 +176,48 @@ def build_view(snapshot):
         "rows": _urgency_rows(snapshot.get("assignments", [])),
         "exam_rows": _urgency_rows(snapshot.get("exams", [])),
         "hints": hints,
+        "message": message,
     }
 
 
-TEMPLATE = """
+@app.route("/")
+def index():
+    content_html = render_template_string(CONTENT_TEMPLATE, **build_view(load_snapshot()))
+    return render_template_string(PAGE_TEMPLATE, content_html=content_html)
+
+
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh():
+    snapshot = do_refresh()
+    message = (
+        {"text": "已重新抓取 Canvas 資料。", "category": "ok"}
+        if snapshot.get("ok")
+        else {"text": f"抓取失敗:{snapshot.get('error')}", "category": "bad"}
+    )
+    return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+
+
+@app.route("/api/notify", methods=["POST"])
+def api_notify():
+    snapshot = load_snapshot()
+    try:
+        cfg = load_config()
+        result = run_notification_check(cfg)
+    except (ConfigError, AuthError) as e:
+        message = {"text": f"檢查失敗:{e}", "category": "bad"}
+        return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+
+    if result["sent"]:
+        names = "、".join(f"{s['course']}《{s['name']}》" for s in result["sent"])
+        message = {"text": f"已發送 {len(result['sent'])} 則 Telegram 提醒:{names}", "category": "ok"}
+    elif result["failed"]:
+        message = {"text": f"{len(result['failed'])} 則提醒發送失敗,下次會重試。", "category": "bad"}
+    else:
+        message = {"text": "目前沒有進入提醒門檻、且尚未通知過的項目。", "category": "ok"}
+    return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+
+
+PAGE_TEMPLATE = """
 <!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -256,6 +256,7 @@ button.primary{ background:var(--accent); color:var(--accent-soft); }
 button.tele{ background:var(--tele); color:var(--tele-ink); }
 button:hover{ filter:brightness(1.08); }
 button:active{ filter:brightness(.96); }
+button:disabled{ opacity:.6; cursor:default; }
 
 .flash{ border-radius:12px; padding:13px 18px; font-size:14px; border:1px solid var(--line); }
 .flash.ok{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
@@ -320,107 +321,119 @@ table{ overflow-x:auto; display:block; }
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <h1>NTUCOOL 截止面板</h1>
-      {% if last_refresh %}<div class="meta">上次更新 {{ last_refresh }}</div>{% endif %}
-    </div>
+    <h1>NTUCOOL 截止面板</h1>
     <div class="actions">
-      <form method="post" action="/refresh">
-        <button type="submit" class="primary">↻ 重新整理</button>
-      </form>
-      <form method="post" action="/notify">
-        <button type="submit" class="tele">✈ 發送 Telegram 通知</button>
-      </form>
+      <button type="button" class="primary" onclick="trigger('/api/refresh', this)">↻ 重新整理</button>
+      <button type="button" class="tele" onclick="trigger('/api/notify', this)">✈ 發送 Telegram 通知</button>
     </div>
   </header>
-
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-      <div class="flash {{ category }}">{{ message }}</div>
-    {% endfor %}
-  {% endwith %}
-
-  {% if not has_data %}
-    <div class="status"><span class="dot none"></span> 還沒有資料,點右上角「重新整理」抓一次。</div>
-  {% elif ok %}
-    <div class="status"><span class="dot ok"></span> Canvas 連線正常</div>
-  {% else %}
-    <div class="status"><span class="dot bad"></span> <span class="err">{{ error }}</span></div>
-  {% endif %}
-
-  {% if has_data %}
-  <section>
-    <div class="section-head"><h2>作業</h2><span class="count">{{ rows|length }}</span></div>
-  </section>
-  {% if rows %}
-  <table>
-    <thead><tr><th>作業</th><th>截止時間</th><th>剩餘</th></tr></thead>
-    <tbody>
-      {% for r in rows %}
-      <tr>
-        <td>
-          {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
-          <div class="course">{{ r.course }}</div>
-        </td>
-        <td>{{ r.due_str }}</td>
-        <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% elif ok %}
-    <div class="empty">目前所有課程都沒有設截止日的作業。</div>
-  {% endif %}
-
-  <section>
-    <div class="section-head"><h2>考試</h2><span class="count">{{ exam_rows|length }}</span></div>
-  </section>
-  {% if exam_rows %}
-  <table>
-    <thead><tr><th>考試 / 測驗</th><th>時間</th><th>剩餘</th></tr></thead>
-    <tbody>
-      {% for r in exam_rows %}
-      <tr>
-        <td>
-          <span class="kind-tag">{{ r.kind_label }}</span>
-          {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
-          <div class="course">{{ r.course }}</div>
-        </td>
-        <td>{{ r.due_str }}</td>
-        <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% elif ok %}
-    <div class="empty">來自 Canvas 測驗(New Quizzes)與行事曆事件,目前查無資料。</div>
-  {% endif %}
-
-  <section>
-    <div class="section-head"><h2>公告中可能提到的考試</h2><span class="count">{{ hints|length }}</span></div>
-    <div class="disclaimer">關鍵字比對公告文字,不是結構化資料,請自行點進去確認日期是否正確。</div>
-  </section>
-  {% if hints %}
-  <div class="hint-list">
-    {% for h in hints %}
-    <div class="hint">
-      <div class="h-top">
-        <span class="h-title">
-          {% if h.html_url %}<a class="link" href="{{ h.html_url }}" target="_blank">{{ h.title }}</a>{% else %}{{ h.title }}{% endif %}
-        </span>
-        <span class="h-meta">{{ h.course }} · {{ h.posted_str }}</span>
-      </div>
-      <div class="h-kw">命中關鍵字:「{{ h.matched_keyword }}」</div>
-    </div>
-    {% endfor %}
-  </div>
-  {% elif ok %}
-    <div class="empty">最近的公告裡沒有掃到考試相關字眼。</div>
-  {% endif %}
-  {% endif %}
+  <div id="content">{{ content_html|safe }}</div>
 </div>
+<script>
+async function trigger(url, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '處理中…';
+  try {
+    const resp = await fetch(url, { method: 'POST' });
+    document.getElementById('content').innerHTML = await resp.text();
+  } catch (err) {
+    document.getElementById('content').insertAdjacentHTML(
+      'afterbegin', '<div class="flash bad">連線失敗,請確認 app.py 還在跑。</div>'
+    );
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+</script>
 </body>
 </html>
+"""
+
+CONTENT_TEMPLATE = """
+{% if last_refresh %}<div class="meta">上次更新 {{ last_refresh }}</div>{% endif %}
+
+{% if message %}<div class="flash {{ message.category }}">{{ message.text }}</div>{% endif %}
+
+{% if not has_data %}
+  <div class="status"><span class="dot none"></span> 還沒有資料,點右上角「重新整理」抓一次。</div>
+{% elif ok %}
+  <div class="status"><span class="dot ok"></span> Canvas 連線正常</div>
+{% else %}
+  <div class="status"><span class="dot bad"></span> <span class="err">{{ error }}</span></div>
+{% endif %}
+
+{% if has_data %}
+<section>
+  <div class="section-head"><h2>作業</h2><span class="count">{{ rows|length }}</span></div>
+</section>
+{% if rows %}
+<table>
+  <thead><tr><th>作業</th><th>截止時間</th><th>剩餘</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>
+        {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
+        <div class="course">{{ r.course }}</div>
+      </td>
+      <td>{{ r.due_str }}</td>
+      <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% elif ok %}
+  <div class="empty">目前所有課程都沒有設截止日的作業。</div>
+{% endif %}
+
+<section>
+  <div class="section-head"><h2>考試</h2><span class="count">{{ exam_rows|length }}</span></div>
+</section>
+{% if exam_rows %}
+<table>
+  <thead><tr><th>考試 / 測驗</th><th>時間</th><th>剩餘</th></tr></thead>
+  <tbody>
+    {% for r in exam_rows %}
+    <tr>
+      <td>
+        <span class="kind-tag">{{ r.kind_label }}</span>
+        {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
+        <div class="course">{{ r.course }}</div>
+      </td>
+      <td>{{ r.due_str }}</td>
+      <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% elif ok %}
+  <div class="empty">來自 Canvas 測驗(New Quizzes)與行事曆事件,目前查無資料。</div>
+{% endif %}
+
+<section>
+  <div class="section-head"><h2>公告中可能提到的考試</h2><span class="count">{{ hints|length }}</span></div>
+  <div class="disclaimer">關鍵字比對公告文字,不是結構化資料,請自行點進去確認日期是否正確。</div>
+</section>
+{% if hints %}
+<div class="hint-list">
+  {% for h in hints %}
+  <div class="hint">
+    <div class="h-top">
+      <span class="h-title">
+        {% if h.html_url %}<a class="link" href="{{ h.html_url }}" target="_blank">{{ h.title }}</a>{% else %}{{ h.title }}{% endif %}
+      </span>
+      <span class="h-meta">{{ h.course }} · {{ h.posted_str }}</span>
+    </div>
+    <div class="h-kw">命中關鍵字:「{{ h.matched_keyword }}」</div>
+  </div>
+  {% endfor %}
+</div>
+{% elif ok %}
+  <div class="empty">最近的公告裡沒有掃到考試相關字眼。</div>
+{% endif %}
+{% endif %}
 """
 
 
