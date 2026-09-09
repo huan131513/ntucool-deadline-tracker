@@ -35,7 +35,7 @@ export default function App() {
             title="作業"
             itemLabel="作業"
             rows={state.assignments}
-            emptyText="目前所有課程都沒有設截止日的作業。"
+            emptyText="無資料"
             showKind={false}
             ok={state.ok}
           />
@@ -43,7 +43,7 @@ export default function App() {
             title="考試"
             itemLabel="考試 / 測驗"
             rows={state.exams}
-            emptyText="來自 Canvas 測驗(New Quizzes)與行事曆事件,目前查無資料。"
+            emptyText="無資料"
             showKind={true}
             ok={state.ok}
           />

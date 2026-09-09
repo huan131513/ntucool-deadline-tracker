@@ -32,7 +32,7 @@ export default function AnnouncementHints({ hints, ok }) {
           ))}
         </div>
       ) : ok ? (
-        <div className="empty">最近的公告裡沒有掃到考試相關字眼。</div>
+        <div className="empty">無資料</div>
       ) : null}
     </>
   )

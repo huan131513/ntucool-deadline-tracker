@@ -221,6 +221,9 @@ a.link:hover {
   text-align: center;
   color: var(--ink-faint);
   font-size: 14px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
 
 .section-head-wrap {
