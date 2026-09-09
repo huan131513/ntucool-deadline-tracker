@@ -18,11 +18,19 @@ See README.md for how to get a Canvas access token and a Telegram bot token.
 """
 import argparse
 import json
+import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+
+# Free-text markers we scan announcement titles/bodies for. This is a best-
+# effort heuristic, NOT a reliable data source — see fetch_announcement_hints.
+EXAM_KEYWORDS = [
+    "期中考", "期末考", "期中", "期末", "小考", "考試", "考卷",
+    "midterm", "final exam", "final", "exam",
+]
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
@@ -163,6 +171,140 @@ def fetch_assignments(session, cfg, course_id):
     )
 
 
+def fetch_quizzes(session, cfg, course_id):
+    params = {"per_page": 100}
+    return canvas_get(session, cfg["canvas_base_url"], f"/api/v1/courses/{course_id}/quizzes", params)
+
+
+def fetch_calendar_events(session, cfg, course_ids):
+    """Course calendar entries (type=event) for the next 180 days — where a
+    teacher manually adds e.g. "期中考" as an event, this is how it's caught."""
+    if not course_ids:
+        return []
+    now = datetime.now(timezone.utc)
+    params = {
+        "type": "event",
+        "start_date": now.date().isoformat(),
+        "end_date": (now + timedelta(days=180)).date().isoformat(),
+        "per_page": 100,
+        "context_codes[]": [f"course_{cid}" for cid in course_ids],
+    }
+    return canvas_get(session, cfg["canvas_base_url"], "/api/v1/calendar_events", params)
+
+
+def _strip_html(html):
+    return re.sub(r"<[^>]+>", " ", html or "")
+
+
+def fetch_announcement_hints(session, cfg, course_id, course_name):
+    """Best-effort keyword scan over recent announcements. This is NOT a
+    structured data source — a matched announcement means "go read this
+    yourself", not a confirmed exam date. Never feed these into Telegram
+    reminders the way real Assignment/Quiz due dates are."""
+    params = {"context_codes[]": f"course_{course_id}", "per_page": 30}
+    try:
+        anns = canvas_get(session, cfg["canvas_base_url"], "/api/v1/announcements", params)
+    except requests.HTTPError:
+        return []
+
+    hints = []
+    for a in anns:
+        text = f"{a.get('title', '')} {_strip_html(a.get('message', ''))}".lower()
+        matched = next((kw for kw in EXAM_KEYWORDS if kw.lower() in text), None)
+        if matched:
+            hints.append(
+                {
+                    "course": course_name,
+                    "title": a.get("title", "(untitled)"),
+                    "posted_at": a.get("posted_at"),
+                    "html_url": a.get("html_url"),
+                    "matched_keyword": matched,
+                }
+            )
+    return hints
+
+
+def collect_exams(cfg):
+    """Exams from the two structured Canvas sources: Quizzes and Calendar
+    Events. Also runs the announcement keyword scan and returns its (low
+    confidence) hits separately — see fetch_announcement_hints."""
+    session = build_session(cfg)
+
+    try:
+        courses = fetch_courses(session, cfg)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (401, 419):
+            raise AuthError(
+                "Canvas authentication failed (401/419). Your session cookie has "
+                "probably expired — log into cool.ntu.edu.tw again in Chrome."
+            )
+        raise
+
+    exams = []
+    for course in courses:
+        course_name = course.get("name") or course.get("course_code") or f"Course {course.get('id')}"
+        try:
+            quizzes = fetch_quizzes(session, cfg, course["id"])
+        except requests.HTTPError as e:
+            # Many Canvas instances (NTUCOOL included) have retired the legacy
+            # Quizzes API in favor of New Quizzes, which surface as regular
+            # graded Assignments instead — see is_quiz_assignment above. A
+            # blanket 404 here just means "nothing to fetch", not an error.
+            if e.response is None or e.response.status_code != 404:
+                print(f"  [warn] failed to fetch quizzes for {course_name}: {e}", file=sys.stderr)
+            continue
+        for q in quizzes:
+            due_at = q.get("due_at") or q.get("lock_at")
+            if not due_at:
+                continue
+            exams.append(
+                {
+                    "id": f"quiz:{q['id']}",
+                    "name": q.get("title") or "(untitled quiz)",
+                    "course": course_name,
+                    "due_at": datetime.fromisoformat(due_at.replace("Z", "+00:00")),
+                    "html_url": q.get("html_url"),
+                    "kind": "quiz",
+                }
+            )
+
+    course_ids = [c["id"] for c in courses]
+    course_name_by_id = {
+        c["id"]: (c.get("name") or c.get("course_code") or f"Course {c['id']}") for c in courses
+    }
+    try:
+        events = fetch_calendar_events(session, cfg, course_ids)
+    except requests.HTTPError as e:
+        print(f"  [warn] failed to fetch calendar events: {e}", file=sys.stderr)
+        events = []
+    for ev in events:
+        start_at = ev.get("start_at")
+        if not start_at:
+            continue
+        context_code = ev.get("context_code", "")
+        course_id = int(context_code.split("_", 1)[1]) if context_code.startswith("course_") else None
+        exams.append(
+            {
+                "id": f"event:{ev['id']}",
+                "name": ev.get("title") or "(untitled event)",
+                "course": course_name_by_id.get(course_id, "—"),
+                "due_at": datetime.fromisoformat(start_at.replace("Z", "+00:00")),
+                "html_url": ev.get("html_url"),
+                "kind": "event",
+            }
+        )
+
+    exams.sort(key=lambda x: x["due_at"])
+
+    hints = []
+    for course in courses:
+        course_name = course.get("name") or course.get("course_code") or f"Course {course['id']}"
+        hints.extend(fetch_announcement_hints(session, cfg, course["id"], course_name))
+    hints.sort(key=lambda h: h.get("posted_at") or "", reverse=True)
+
+    return exams, hints
+
+
 def collect_upcoming_assignments(cfg):
     session = build_session(cfg)
 
@@ -205,6 +347,10 @@ def collect_upcoming_assignments(cfg):
                     "course": course_name,
                     "due_at": due_dt,
                     "html_url": a.get("html_url"),
+                    # New Quizzes (NTUCOOL's exam tool) show up here, not in the
+                    # legacy /quizzes API — flagged so callers can route them
+                    # into an "exams" view instead of the plain assignment list.
+                    "is_quiz": bool(a.get("is_quiz_assignment")),
                     "has_submitted": bool(
                         a.get("submission", {}).get("workflow_state") not in (None, "unsubmitted")
                     ) if isinstance(a.get("submission"), dict) else None,

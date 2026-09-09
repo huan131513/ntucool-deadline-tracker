@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, redirect, render_template_string, url_for
 
-from main import BASE_DIR, AuthError, ConfigError, collect_upcoming_assignments, load_config
+from main import BASE_DIR, AuthError, ConfigError, collect_exams, collect_upcoming_assignments, load_config
 
 app = Flask(__name__)
 DATA_PATH = BASE_DIR / "dashboard_data.json"
@@ -41,6 +41,7 @@ def do_refresh():
     try:
         cfg = load_config()
         items, _now = collect_upcoming_assignments(cfg)
+        exams, hints = collect_exams(cfg)
     except (ConfigError, AuthError) as e:
         snapshot = {
             **prev,
@@ -50,6 +51,24 @@ def do_refresh():
         }
         save_snapshot(snapshot)
         return snapshot
+
+    # New Quizzes (NTUCOOL's exam tool) come back from the Assignments API
+    # tagged is_quiz — route those into the exam list instead of homework.
+    assignment_items = [it for it in items if not it.get("is_quiz")]
+    quiz_assignments = [it for it in items if it.get("is_quiz")]
+
+    all_exams = exams + [
+        {
+            "id": f"newquiz:{it['id']}",
+            "name": it["name"],
+            "course": it["course"],
+            "due_at": it["due_at"],
+            "html_url": it["html_url"],
+            "kind": "new_quiz",
+        }
+        for it in quiz_assignments
+    ]
+    all_exams.sort(key=lambda x: x["due_at"] or datetime.max.replace(tzinfo=timezone.utc))
 
     snapshot = {
         "last_refresh": now_str,
@@ -62,8 +81,19 @@ def do_refresh():
                 "due_at": it["due_at"].isoformat() if it["due_at"] else None,
                 "html_url": it["html_url"],
             }
-            for it in items
+            for it in assignment_items
         ],
+        "exams": [
+            {
+                "course": e["course"],
+                "name": e["name"],
+                "due_at": e["due_at"].isoformat() if e["due_at"] else None,
+                "html_url": e["html_url"],
+                "kind": e["kind"],
+            }
+            for e in all_exams
+        ],
+        "hints": hints,
     }
     save_snapshot(snapshot)
     return snapshot
@@ -81,14 +111,14 @@ def refresh():
     return redirect(url_for("index"))
 
 
-def build_view(snapshot):
-    if snapshot is None:
-        return {"has_data": False, "ok": None, "error": None, "last_refresh": None, "rows": []}
+KIND_LABEL = {"quiz": "測驗", "event": "行事曆", "new_quiz": "測驗"}
 
+
+def _urgency_rows(entries):
     now = datetime.now(timezone.utc)
     rows = []
-    for a in snapshot.get("assignments", []):
-        due_at = datetime.fromisoformat(a["due_at"]) if a["due_at"] else None
+    for e in entries:
+        due_at = datetime.fromisoformat(e["due_at"]) if e.get("due_at") else None
         if due_at is not None:
             days_left = (due_at - now).total_seconds() / 86400
             due_str = due_at.astimezone().strftime("%Y-%m-%d %H:%M")
@@ -106,27 +136,49 @@ def build_view(snapshot):
 
         rows.append(
             {
-                "course": a["course"],
-                "name": a["name"],
+                "course": e["course"],
+                "name": e["name"],
                 "due_str": due_str,
                 "days_str": days_str,
                 "urgency": urgency,
-                "html_url": a.get("html_url"),
+                "html_url": e.get("html_url"),
+                "kind_label": KIND_LABEL.get(e.get("kind"), ""),
                 "sort_key": days_left,
             }
         )
     rows.sort(key=lambda r: r["sort_key"])
+    return rows
+
+
+def build_view(snapshot):
+    if snapshot is None:
+        return {
+            "has_data": False, "ok": None, "error": None, "last_refresh": None,
+            "rows": [], "exam_rows": [], "hints": [],
+        }
 
     last_refresh = snapshot.get("last_refresh")
     if last_refresh:
         last_refresh = datetime.fromisoformat(last_refresh).strftime("%Y-%m-%d %H:%M:%S")
+
+    hints = []
+    for h in snapshot.get("hints", []):
+        posted = h.get("posted_at")
+        hints.append(
+            {
+                **h,
+                "posted_str": datetime.fromisoformat(posted).astimezone().strftime("%Y-%m-%d") if posted else "—",
+            }
+        )
 
     return {
         "has_data": True,
         "ok": snapshot.get("ok"),
         "error": snapshot.get("error"),
         "last_refresh": last_refresh,
-        "rows": rows,
+        "rows": _urgency_rows(snapshot.get("assignments", [])),
+        "exam_rows": _urgency_rows(snapshot.get("exams", [])),
+        "hints": hints,
     }
 
 
@@ -201,9 +253,30 @@ tbody tr:hover{ background:var(--accent-soft); }
 .pill.normal{ color:var(--ink-soft); background:var(--accent-soft); }
 a.link{ color:var(--accent); text-decoration:none; font-size:13px; }
 a.link:hover{ text-decoration:underline; }
-.empty{ padding:40px 20px; text-align:center; color:var(--ink-faint); font-size:14px; }
+.empty{ padding:32px 20px; text-align:center; color:var(--ink-faint); font-size:14px; }
 table{ overflow-x:auto; display:block; }
 @media(min-width:1px){ table{ display:table; } .wrap{ overflow-x:auto; } }
+
+.section-head{ display:flex; align-items:baseline; gap:9px; }
+.section-head h2{
+  font-family:'Fraunces', serif; font-weight:600; font-size:19px; margin:0;
+}
+.section-head .count{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-faint); }
+.kind-tag{
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.04em;
+  color:var(--ink-faint); background:var(--accent-soft); border-radius:5px; padding:1px 6px; margin-right:6px;
+}
+
+.hint-list{ display:flex; flex-direction:column; gap:10px; }
+.hint{
+  background:var(--raise); border:1px solid var(--line); border-left:3px solid var(--soon);
+  border-radius:0 10px 10px 0; padding:12px 16px; font-size:13.5px;
+}
+.hint .h-top{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.hint .h-title{ font-weight:600; }
+.hint .h-meta{ color:var(--ink-faint); font-size:12px; font-family:'IBM Plex Mono', monospace; white-space:nowrap; }
+.hint .h-kw{ color:var(--soon); font-size:12px; margin-top:3px; }
+.disclaimer{ font-size:12.5px; color:var(--ink-faint); margin-top:-6px; }
 </style>
 </head>
 <body>
@@ -226,11 +299,13 @@ table{ overflow-x:auto; display:block; }
     <div class="status"><span class="dot bad"></span> <span class="err">{{ error }}</span></div>
   {% endif %}
 
-  {% if has_data and rows %}
+  {% if has_data %}
+  <section>
+    <div class="section-head"><h2>作業</h2><span class="count">{{ rows|length }}</span></div>
+  </section>
+  {% if rows %}
   <table>
-    <thead>
-      <tr><th>作業</th><th>截止時間</th><th>剩餘</th></tr>
-    </thead>
+    <thead><tr><th>作業</th><th>截止時間</th><th>剩餘</th></tr></thead>
     <tbody>
       {% for r in rows %}
       <tr>
@@ -244,8 +319,55 @@ table{ overflow-x:auto; display:block; }
       {% endfor %}
     </tbody>
   </table>
-  {% elif has_data and ok %}
+  {% elif ok %}
     <div class="empty">目前所有課程都沒有設截止日的作業。</div>
+  {% endif %}
+
+  <section>
+    <div class="section-head"><h2>考試</h2><span class="count">{{ exam_rows|length }}</span></div>
+  </section>
+  {% if exam_rows %}
+  <table>
+    <thead><tr><th>考試 / 測驗</th><th>時間</th><th>剩餘</th></tr></thead>
+    <tbody>
+      {% for r in exam_rows %}
+      <tr>
+        <td>
+          <span class="kind-tag">{{ r.kind_label }}</span>
+          {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
+          <div class="course">{{ r.course }}</div>
+        </td>
+        <td>{{ r.due_str }}</td>
+        <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% elif ok %}
+    <div class="empty">來自 Canvas 測驗(New Quizzes)與行事曆事件,目前查無資料。</div>
+  {% endif %}
+
+  <section>
+    <div class="section-head"><h2>公告中可能提到的考試</h2><span class="count">{{ hints|length }}</span></div>
+    <div class="disclaimer">關鍵字比對公告文字,不是結構化資料,請自行點進去確認日期是否正確。</div>
+  </section>
+  {% if hints %}
+  <div class="hint-list">
+    {% for h in hints %}
+    <div class="hint">
+      <div class="h-top">
+        <span class="h-title">
+          {% if h.html_url %}<a class="link" href="{{ h.html_url }}" target="_blank">{{ h.title }}</a>{% else %}{{ h.title }}{% endif %}
+        </span>
+        <span class="h-meta">{{ h.course }} · {{ h.posted_str }}</span>
+      </div>
+      <div class="h-kw">命中關鍵字:「{{ h.matched_keyword }}」</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif ok %}
+    <div class="empty">最近的公告裡沒有掃到考試相關字眼。</div>
+  {% endif %}
   {% endif %}
 </div>
 </body>
