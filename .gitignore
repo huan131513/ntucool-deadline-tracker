@@ -1,6 +1,9 @@
 config.json
 state.json
+dashboard_data.json
 __pycache__/
 *.pyc
 .venv/
 launchd.log
+flask.log
+.claude/

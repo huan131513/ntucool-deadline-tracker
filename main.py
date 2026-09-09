@@ -28,6 +28,19 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
 
+class ConfigError(Exception):
+    """Something's wrong with config.json itself (missing/incomplete)."""
+
+
+class AuthError(Exception):
+    """Couldn't get an authenticated Canvas session (bad/expired cookie, etc.).
+
+    Raised instead of calling sys.exit() directly so callers other than the
+    CLI (e.g. the web dashboard) can catch it and show a friendly status
+    instead of the whole process dying mid-request.
+    """
+
+
 def log(msg, *, err=False):
     """Timestamped line for launchd.log — lets us later see exactly when auth
     started/stopped succeeding, e.g. to size how long the Chrome cookie lasts."""
@@ -37,9 +50,9 @@ def log(msg, *, err=False):
 
 def load_config():
     if not CONFIG_PATH.exists():
-        sys.exit(
-            f"Missing {CONFIG_PATH}.\n"
-            f"Copy config.example.json to config.json and fill in your tokens first."
+        raise ConfigError(
+            f"Missing {CONFIG_PATH}. Copy config.example.json to config.json "
+            f"and fill in your values first."
         )
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -101,7 +114,7 @@ def build_session(cfg):
         try:
             import browser_cookie3
         except ImportError:
-            sys.exit(
+            raise ConfigError(
                 "canvas_auth_mode is 'chrome' but the 'browser_cookie3' package isn't "
                 "installed. Run: pip install browser_cookie3"
             )
@@ -109,14 +122,14 @@ def build_session(cfg):
         try:
             cj = browser_cookie3.chrome(domain_name=domain)
         except Exception as e:
-            sys.exit(
-                f"Failed to read cookies from Chrome ({e}).\n"
-                f"Make sure Chrome is installed, you're logged into {domain} there, "
-                f"and you approve any macOS Keychain prompt for cookie decryption."
+            raise AuthError(
+                f"Failed to read cookies from Chrome ({e}). Make sure Chrome is installed, "
+                f"you're logged into {domain} there, and you approve any macOS Keychain "
+                f"prompt for cookie decryption."
             )
         cookie_value = "; ".join(f"{c.name}={c.value}" for c in cj)
         if not cookie_value:
-            sys.exit(
+            raise AuthError(
                 f"No cookies found for {domain} in Chrome. Log into "
                 f"https://{domain} in Chrome first, then try again."
             )
@@ -124,12 +137,12 @@ def build_session(cfg):
     elif auth_mode == "cookie":
         cookie_value = cfg.get("canvas_cookie", "")
         if not cookie_value:
-            sys.exit("canvas_auth_mode is 'cookie' but canvas_cookie is empty in config.json.")
+            raise ConfigError("canvas_auth_mode is 'cookie' but canvas_cookie is empty in config.json.")
         session.headers.update({"Cookie": cookie_value})
     else:
         token = cfg.get("canvas_access_token", "")
         if not token:
-            sys.exit("canvas_auth_mode is 'token' but canvas_access_token is empty in config.json.")
+            raise ConfigError("canvas_auth_mode is 'token' but canvas_access_token is empty in config.json.")
         session.headers.update({"Authorization": f"Bearer {token}"})
 
     session.headers.update({"Accept": "application/json"})
@@ -157,10 +170,11 @@ def collect_upcoming_assignments(cfg):
         courses = fetch_courses(session, cfg)
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code in (401, 419):
-            log("AUTH FAILED (401/419) — Chrome cookie is no longer valid. "
-                "Log into cool.ntu.edu.tw again and this will pick it back up "
-                "on the next scheduled run.", err=True)
-            sys.exit(1)
+            log("AUTH FAILED (401/419) — Chrome cookie is no longer valid.", err=True)
+            raise AuthError(
+                "Canvas authentication failed (401/419). Your session cookie has "
+                "probably expired — log into cool.ntu.edu.tw again in Chrome."
+            )
         raise
 
     log(f"AUTH OK — {len(courses)} active course(s) fetched.")
@@ -291,12 +305,14 @@ def main():
     )
     args = parser.parse_args()
 
-    cfg = load_config()
-
-    if args.list:
-        cmd_list(cfg)
-    else:
-        cmd_check(cfg, dry_run=args.dry_run)
+    try:
+        cfg = load_config()
+        if args.list:
+            cmd_list(cfg)
+        else:
+            cmd_check(cfg, dry_run=args.dry_run)
+    except (ConfigError, AuthError) as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":
