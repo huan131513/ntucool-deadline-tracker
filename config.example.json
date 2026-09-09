@@ -1,0 +1,18 @@
+{
+  "canvas_base_url": "https://cool.ntu.edu.tw",
+
+  "_comment_auth": "NTUCOOL doesn't support personal access tokens. 'chrome' mode reads your session cookie straight out of local Chrome (no password, no copy/paste) and only works when this script runs on your own machine. 'cookie' is the manual fallback. 'token' is for Canvas instances that DO support personal access tokens.",
+  "canvas_auth_mode": "chrome",
+  "canvas_cookie_domain": "cool.ntu.edu.tw",
+  "canvas_cookie": "",
+  "canvas_access_token": "",
+
+  "telegram_bot_token": "PASTE_YOUR_TELEGRAM_BOT_TOKEN_HERE",
+  "telegram_chat_id": "PASTE_YOUR_TELEGRAM_CHAT_ID_HERE",
+
+  "remind_before_days": [7, 3, 1],
+  "include_courses_without_due_date": false,
+  "only_active_courses": true,
+
+  "state_file": "state.json"
+}
