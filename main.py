@@ -28,6 +28,13 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
 
+def log(msg, *, err=False):
+    """Timestamped line for launchd.log — lets us later see exactly when auth
+    started/stopped succeeding, e.g. to size how long the Chrome cookie lasts."""
+    ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    print(f"[{ts}] {msg}", file=sys.stderr if err else sys.stdout)
+
+
 def load_config():
     if not CONFIG_PATH.exists():
         sys.exit(
@@ -150,13 +157,13 @@ def collect_upcoming_assignments(cfg):
         courses = fetch_courses(session, cfg)
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code in (401, 419):
-            sys.exit(
-                "Canvas authentication failed (401/419). Your session cookie has probably "
-                "expired — log into cool.ntu.edu.tw again in your browser, copy a fresh "
-                "Cookie header value, and update canvas_cookie in config.json."
-            )
+            log("AUTH FAILED (401/419) — Chrome cookie is no longer valid. "
+                "Log into cool.ntu.edu.tw again and this will pick it back up "
+                "on the next scheduled run.", err=True)
+            sys.exit(1)
         raise
 
+    log(f"AUTH OK — {len(courses)} active course(s) fetched.")
     now = datetime.now(timezone.utc)
 
     items = []
@@ -237,16 +244,15 @@ def cmd_check(cfg, dry_run=False):
         for threshold in thresholds:
             key = f"{it['id']}:{threshold}"
             if days_left <= threshold and key not in state["notified"]:
-                to_send.append((it, threshold, days_left))
-                if not dry_run:
-                    state["notified"][key] = True
+                to_send.append((key, it, threshold, days_left))
                 break  # only notify for the nearest crossed threshold per run
 
     if not to_send:
-        print("No new deadline reminders to send.")
+        log("No new deadline reminders to send.")
         return
 
-    for it, threshold, days_left in to_send:
+    sent_count = 0
+    for key, it, threshold, days_left in to_send:
         due_str = it["due_at"].astimezone().strftime("%Y-%m-%d %H:%M")
         msg = (
             f"⏰ <b>作業截止提醒</b>\n"
@@ -259,11 +265,20 @@ def cmd_check(cfg, dry_run=False):
             msg += f"連結:{it['html_url']}"
 
         print(f"--- reminder ---\n{msg}\n")
-        if not dry_run:
-            send_telegram(cfg, msg)
+        if dry_run:
+            continue
 
-    if not dry_run:
+        # Only mark as notified once Telegram actually confirms delivery —
+        # a failed send (Telegram-side, not cookie-side) should retry next run.
+        if send_telegram(cfg, msg):
+            state["notified"][key] = True
+            sent_count += 1
+        else:
+            log(f"Telegram send failed for '{it['name']}' — will retry next run.", err=True)
+
+    if not dry_run and sent_count:
         save_state(cfg.get("state_file", "state.json"), state)
+        log(f"Sent {sent_count} reminder(s).")
 
 
 def main():
