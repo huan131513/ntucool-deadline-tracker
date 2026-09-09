@@ -27,6 +27,7 @@ from main import (
     collect_upcoming_assignments,
     load_config,
     run_notification_check,
+    send_incomplete_digest,
 )
 
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -219,6 +220,25 @@ def api_notify():
         message = {"text": f"{len(result['failed'])} 則提醒發送失敗,下次會重試。", "category": "bad"}
     else:
         message = {"text": "目前沒有進入提醒門檻、且尚未通知過的項目。", "category": "ok"}
+    return jsonify({"message": message})
+
+
+@app.route("/api/notify-digest", methods=["POST"])
+def api_notify_digest():
+    """The dashboard's "發送 Telegram 通知" button — unconditionally sends
+    one message listing every not-yet-due assignment, no threshold or
+    dedup. Distinct from /api/notify, which the hourly launchd job still
+    uses for near-deadline pings."""
+    try:
+        cfg = load_config()
+        result = send_incomplete_digest(cfg)
+    except (ConfigError, AuthError) as e:
+        return jsonify({"message": {"text": f"發送失敗:{e}", "category": "bad"}})
+
+    if result["sent"]:
+        message = {"text": f"已發送未完成作業清單(共 {result['count']} 筆)。", "category": "ok"}
+    else:
+        message = {"text": "發送失敗,請確認 Telegram 設定。", "category": "bad"}
     return jsonify({"message": message})
 
 

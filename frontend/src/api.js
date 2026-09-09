@@ -10,4 +10,6 @@ async function request(path, options) {
 
 export const getState = () => request('/state')
 export const refresh = () => request('/refresh', { method: 'POST' })
-export const notify = () => request('/notify', { method: 'POST' })
+// Always sends one "all incomplete assignments" digest — no threshold, no
+// dedup. The hourly launchd job uses /api/notify (threshold-based) instead.
+export const notify = () => request('/notify-digest', { method: 'POST' })

@@ -388,12 +388,52 @@ def cmd_list(cfg):
         print(f"- [{it['course']}] {it['name']} — due {due_str}")
 
 
+def build_incomplete_digest_message(items, now):
+    """One Telegram message listing every assignment that isn't past due
+    yet — sorted soonest first. Always produces a message, even when the
+    list is empty, so the caller can unconditionally send exactly one."""
+    upcoming = [it for it in items if it["due_at"] is None or (it["due_at"] - now).total_seconds() >= 0]
+    upcoming.sort(key=lambda it: (it["due_at"] is None, it["due_at"]))
+
+    if not upcoming:
+        return "🎉 <b>目前沒有未完成的作業</b>"
+
+    lines = [f"📋 <b>未完成作業清單</b>(共 {len(upcoming)} 筆)", ""]
+    for it in upcoming:
+        if it["due_at"] is None:
+            due_str = "(未設定截止日)"
+        else:
+            days_left = (it["due_at"] - now).total_seconds() / 86400
+            due_str = it["due_at"].astimezone().strftime("%Y-%m-%d %H:%M") + f"(剩 {days_left:.1f} 天)"
+        lines.append(f"• [{it['course']}] {it['name']} — {due_str}")
+    return "\n".join(lines)
+
+
+def send_incomplete_digest(cfg, dry_run=False):
+    """Unconditionally send ONE Telegram message listing all not-yet-due
+    assignments — no threshold, no dedup against state.json. This is the
+    web dashboard's manual "發送 Telegram 通知" button; the scheduled
+    launchd job keeps using run_notification_check() below instead, so
+    the hourly automation still only pings you near an actual deadline."""
+    items, now = collect_upcoming_assignments(cfg)
+    message = build_incomplete_digest_message(items, now)
+
+    print(f"--- digest ---\n{message}\n")
+    if dry_run:
+        return {"sent": False, "count": len(items), "message": message}
+
+    ok = send_telegram(cfg, message)
+    if not ok:
+        log("Telegram digest send failed.", err=True)
+    return {"sent": ok, "count": len(items), "message": message}
+
+
 def run_notification_check(cfg, dry_run=False):
     """Compare every assignment's due date against remind_before_days,
     send Telegram reminders for thresholds not yet notified, and persist
-    state.json. Shared by the CLI (`main.py`, the scheduled launchd run)
-    and the web dashboard's manual "發送 Telegram 通知" button — both
-    should see the exact same dedup behaviour.
+    state.json. Used by the scheduled launchd job (and the CLI) so
+    automated pings only fire near an actual deadline — see
+    send_incomplete_digest() above for the dashboard's on-demand digest.
 
     Returns {"candidates": [...], "sent": [...], "failed": [...]} so
     callers can report what happened without re-deriving it from stdout.
