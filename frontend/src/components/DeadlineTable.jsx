@@ -13,6 +13,7 @@ export default function DeadlineTable({ title, itemLabel, rows, emptyText, showK
       </section>
 
       {rows && rows.length > 0 ? (
+        <div className="table-wrap">
         <table>
           <thead>
             <tr>
@@ -43,6 +44,7 @@ export default function DeadlineTable({ title, itemLabel, rows, emptyText, showK
             ))}
           </tbody>
         </table>
+        </div>
       ) : ok ? (
         <div className="empty">{emptyText}</div>
       ) : null}

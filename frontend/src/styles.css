@@ -147,14 +147,15 @@ button:disabled {
   color: var(--crit);
 }
 
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
 table {
   width: 100%;
   border-collapse: collapse;
   background: var(--raise);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  overflow-x: auto;
-  display: block;
 }
 thead th {
   text-align: left;
