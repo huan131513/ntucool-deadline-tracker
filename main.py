@@ -388,7 +388,16 @@ def cmd_list(cfg):
         print(f"- [{it['course']}] {it['name']} — due {due_str}")
 
 
-def cmd_check(cfg, dry_run=False):
+def run_notification_check(cfg, dry_run=False):
+    """Compare every assignment's due date against remind_before_days,
+    send Telegram reminders for thresholds not yet notified, and persist
+    state.json. Shared by the CLI (`main.py`, the scheduled launchd run)
+    and the web dashboard's manual "發送 Telegram 通知" button — both
+    should see the exact same dedup behaviour.
+
+    Returns {"candidates": [...], "sent": [...], "failed": [...]} so
+    callers can report what happened without re-deriving it from stdout.
+    """
     items, now = collect_upcoming_assignments(cfg)
     thresholds = sorted(cfg.get("remind_before_days", [7, 3, 1]))
     state = load_state(cfg.get("state_file", "state.json"))
@@ -407,11 +416,7 @@ def cmd_check(cfg, dry_run=False):
                 to_send.append((key, it, threshold, days_left))
                 break  # only notify for the nearest crossed threshold per run
 
-    if not to_send:
-        log("No new deadline reminders to send.")
-        return
-
-    sent_count = 0
+    sent, failed = [], []
     for key, it, threshold, days_left in to_send:
         due_str = it["due_at"].astimezone().strftime("%Y-%m-%d %H:%M")
         msg = (
@@ -432,12 +437,23 @@ def cmd_check(cfg, dry_run=False):
         # a failed send (Telegram-side, not cookie-side) should retry next run.
         if send_telegram(cfg, msg):
             state["notified"][key] = True
-            sent_count += 1
+            sent.append({"name": it["name"], "course": it["course"], "days_left": days_left})
         else:
+            failed.append({"name": it["name"], "course": it["course"]})
             log(f"Telegram send failed for '{it['name']}' — will retry next run.", err=True)
 
-    if not dry_run and sent_count:
+    if not dry_run and sent:
         save_state(cfg.get("state_file", "state.json"), state)
+
+    return {"candidates": to_send, "sent": sent, "failed": failed}
+
+
+def cmd_check(cfg, dry_run=False):
+    result = run_notification_check(cfg, dry_run=dry_run)
+    if not result["candidates"]:
+        log("No new deadline reminders to send.")
+    elif result["sent"]:
+        log(f"Sent {len(result['sent'])} reminder(s).")
         log(f"Sent {sent_count} reminder(s).")
 
 

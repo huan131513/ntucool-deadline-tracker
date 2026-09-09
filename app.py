@@ -10,13 +10,25 @@ Only meant to run on your own machine — it reads your local Chrome's cookie
 store, same constraint as main.py's "chrome" auth mode.
 """
 import json
+import os
 from datetime import datetime, timezone
 
-from flask import Flask, redirect, render_template_string, url_for
+from flask import Flask, flash, redirect, render_template_string, url_for
 
-from main import BASE_DIR, AuthError, ConfigError, collect_exams, collect_upcoming_assignments, load_config
+from main import (
+    BASE_DIR,
+    AuthError,
+    ConfigError,
+    collect_exams,
+    collect_upcoming_assignments,
+    load_config,
+    run_notification_check,
+)
 
 app = Flask(__name__)
+# Only used to sign the flash-message cookie; the server only ever binds to
+# 127.0.0.1, so a random per-process key is fine — no persistence needed.
+app.secret_key = os.urandom(24)
 DATA_PATH = BASE_DIR / "dashboard_data.json"
 
 
@@ -107,7 +119,30 @@ def index():
 
 @app.route("/refresh", methods=["POST"])
 def refresh():
-    do_refresh()
+    snapshot = do_refresh()
+    if snapshot.get("ok"):
+        flash("已重新抓取 Canvas 資料。", "ok")
+    else:
+        flash(f"抓取失敗:{snapshot.get('error')}", "bad")
+    return redirect(url_for("index"))
+
+
+@app.route("/notify", methods=["POST"])
+def notify():
+    try:
+        cfg = load_config()
+        result = run_notification_check(cfg)
+    except (ConfigError, AuthError) as e:
+        flash(f"檢查失敗:{e}", "bad")
+        return redirect(url_for("index"))
+
+    if result["sent"]:
+        names = "、".join(f"{s['course']}《{s['name']}》" for s in result["sent"])
+        flash(f"已發送 {len(result['sent'])} 則 Telegram 提醒:{names}", "ok")
+    elif result["failed"]:
+        flash(f"{len(result['failed'])} 則提醒發送失敗,下次會重試。", "bad")
+    else:
+        flash("目前沒有進入提醒門檻、且尚未通知過的項目。", "ok")
     return redirect(url_for("index"))
 
 
@@ -195,14 +230,10 @@ TEMPLATE = """
   --bg:#f6f3ec; --raise:#ffffff; --ink:#1c231f; --ink-soft:#52584f; --ink-faint:#8b9086;
   --line:#dcd6c8; --accent:#1f5c42; --accent-soft:#e4ede2;
   --crit:#b3412c; --crit-soft:#f7e2dd; --soon:#a15a1f; --soon-soft:#f3e6d5; --past:#7a7166; --past-soft:#e9e4d8;
+  --tele:#2a8fd6; --tele-ink:#e9f4fc;
 }
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#141a16; --raise:#1b2320; --ink:#eef1ea; --ink-soft:#a9b0a4; --ink-faint:#6c756c;
-    --line:#2c352f; --accent:#6fbd93; --accent-soft:#1f2e26;
-    --crit:#e08a76; --crit-soft:#33201c; --soon:#d9a15f; --soon-soft:#2c2419; --past:#8a8f85; --past-soft:#242a24;
-  }
-}
+/* Fixed light theme — intentionally ignores prefers-color-scheme. */
+html{ color-scheme: light; }
 *{ box-sizing:border-box; }
 body{
   margin:0; background:var(--bg); color:var(--ink);
@@ -215,13 +246,20 @@ h1{
   margin:0; letter-spacing:-.01em;
 }
 .meta{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--ink-faint); margin-top:6px; }
+.actions{ display:flex; gap:10px; flex-wrap:wrap; }
 button{
   font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:14.5px;
-  background:var(--accent); color:var(--accent-soft); border:none; border-radius:10px;
-  padding:11px 20px; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.08);
+  border:none; border-radius:10px; padding:11px 20px; cursor:pointer;
+  box-shadow:0 1px 2px rgba(0,0,0,.08); white-space:nowrap;
 }
+button.primary{ background:var(--accent); color:var(--accent-soft); }
+button.tele{ background:var(--tele); color:var(--tele-ink); }
 button:hover{ filter:brightness(1.08); }
 button:active{ filter:brightness(.96); }
+
+.flash{ border-radius:12px; padding:13px 18px; font-size:14px; border:1px solid var(--line); }
+.flash.ok{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
+.flash.bad{ background:var(--crit-soft); color:var(--crit); border-color:var(--crit); }
 
 .status{
   display:flex; align-items:center; gap:10px;
@@ -286,10 +324,21 @@ table{ overflow-x:auto; display:block; }
       <h1>NTUCOOL 截止面板</h1>
       {% if last_refresh %}<div class="meta">上次更新 {{ last_refresh }}</div>{% endif %}
     </div>
-    <form method="post" action="/refresh">
-      <button type="submit">↻ 重新整理</button>
-    </form>
+    <div class="actions">
+      <form method="post" action="/refresh">
+        <button type="submit" class="primary">↻ 重新整理</button>
+      </form>
+      <form method="post" action="/notify">
+        <button type="submit" class="tele">✈ 發送 Telegram 通知</button>
+      </form>
+    </div>
   </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
 
   {% if not has_data %}
     <div class="status"><span class="dot none"></span> 還沒有資料,點右上角「重新整理」抓一次。</div>
