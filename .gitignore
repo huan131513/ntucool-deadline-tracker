@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 launchd.log
 flask.log
+web.log
 .claude/
 frontend/node_modules/
 frontend/dist/

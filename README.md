@@ -69,30 +69,37 @@ python3 main.py --dry-run
 python3 main.py
 ```
 
-## 5. 排程自動執行(macOS)
+## 5. 排程自動執行(macOS launchd)
 
-用 cron 每天早上 8 點跑一次:
+推薦用 `launchd`(比 cron 更能配合 Mac 睡眠/喚醒)。需要**兩個服務**,因為排程現在是打網頁面板的 API,而不是直接跑 `main.py`(這樣 CLI 跟網頁按鈕的通知邏輯才是同一份程式碼路徑):
+
+1. **`com.example.ntucool-web`**:常駐服務,讓 `app.py` 一直在背景跑(`RunAtLoad` + `KeepAlive`,掛掉會自動重啟)
+2. **`com.example.ntucool-notify`**:每小時觸發一次,對著 `com.example.ntucool-web` 打 `curl -X POST http://127.0.0.1:5050/api/notify`
+
+範本在 [`launchd/`](launchd/) 資料夾,套用步驟:
 
 ```bash
-crontab -e
+cp launchd/com.example.ntucool-web.plist ~/Library/LaunchAgents/com.yourname.ntucool-web.plist
+cp launchd/com.example.ntucool-notify.plist ~/Library/LaunchAgents/com.yourname.ntucool-notify.plist
 ```
 
-加入一行(記得把路徑換成你自己的):
+編輯這兩個檔案:
+- 把 `Label` 裡的 `com.example` 換成你自己的識別字串(跟檔名一致)
+- 把 `/ABSOLUTE/PATH/TO/ntucool-deadline-tracker` 換成你專案的實際絕對路徑
 
-```
-0 8 * * * cd ~/Documents/GitHub/ntucool-deadline-tracker && .venv/bin/python main.py >> cron.log 2>&1
+然後載入:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.ntucool-web.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.ntucool-notify.plist
 ```
 
-想更頻繁一點,例如每 6 小時檢查一次:
-
-```
-0 */6 * * * cd ~/Documents/GitHub/ntucool-deadline-tracker && .venv/bin/python main.py >> cron.log 2>&1
-```
+> ⚠️ **第一次載入新的 LaunchAgent,macOS 可能會跳通知或要你去「系統設定 → 一般 → 登入項目與延伸功能」手動核准**,沒核准的話服務會靜默失敗(`launchctl print` 會顯示 `last exit code = 78: EX_CONFIG`,且完全沒有 log 輸出)。核准後重新 `launchctl bootstrap` 一次即可。
 
 > 因為程式會用 `state.json` 記錄「哪個作業的哪個提醒門檻已經發過」,所以就算排程跑很頻繁,
 > 同一個提醒也只會收到一次,不會洗版。
 
-> ⚠️ **限制**:`"chrome"` 模式只能在這台裝有 Chrome 的電腦本機執行,無法部署到 Vercel 等雲端服務(讀不到你本機的瀏覽器資料)。如果你的 Mac 會睡眠,記得在「系統設定 → 電池/節能」開啟「排定的活動可以喚醒電腦」之類的選項,或改用 `launchd` 排程(比 cron 更能配合喚醒),不然電腦睡著時 cron 不會執行。
+> ⚠️ **限制**:`"chrome"` 模式只能在這台裝有 Chrome 的電腦本機執行,無法部署到 Vercel 等雲端服務(讀不到你本機的瀏覽器資料)。
 
 ## 6. 網頁面板(React + Flask)
 

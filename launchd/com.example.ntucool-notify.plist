@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.ntucool-deadline-tracker</string>
+
+    <!-- Was: python3 main.py directly. Now goes through the dashboard's
+         API instead, so the CLI path and the button on the web page share
+         the exact same code path (run_notification_check in main.py) via
+         one entry point — com.example.ntucool-web must be running for this
+         to succeed; it's a KeepAlive service, see its own plist. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/curl</string>
+        <string>-s</string>
+        <string>-X</string>
+        <string>POST</string>
+        <string>http://127.0.0.1:5050/api/notify</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/ABSOLUTE/PATH/TO/ntucool-deadline-tracker</string>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>StandardOutPath</key>
+    <string>/ABSOLUTE/PATH/TO/ntucool-deadline-tracker/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/ABSOLUTE/PATH/TO/ntucool-deadline-tracker/launchd.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
