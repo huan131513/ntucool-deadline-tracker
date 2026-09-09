@@ -94,14 +94,44 @@ crontab -e
 
 > ⚠️ **限制**:`"chrome"` 模式只能在這台裝有 Chrome 的電腦本機執行,無法部署到 Vercel 等雲端服務(讀不到你本機的瀏覽器資料)。如果你的 Mac 會睡眠,記得在「系統設定 → 電池/節能」開啟「排定的活動可以喚醒電腦」之類的選項,或改用 `launchd` 排程(比 cron 更能配合喚醒),不然電腦睡著時 cron 不會執行。
 
+## 6. 網頁面板(React + Flask)
+
+除了排程自動提醒,還有一個本機網頁面板可以手動觸發抓取、看作業/考試清單、手動發 Telegram 通知。前端是 React(Vite 建置),後端是 Flask 純 JSON API。
+
+```bash
+# 第一次使用,或改了前端程式碼之後:
+cd frontend
+npm install
+npm run build      # 產出 frontend/dist/,Flask 會直接讀這裡
+
+# 回到專案根目錄啟動後端(同時會把上面 build 好的前端一起端出去):
+cd ..
+source .venv/bin/activate
+python3 app.py
+```
+
+打開 http://localhost:5050,兩顆按鈕:「重新整理」(重新走一次 chrome cookie → Canvas API 抓取)、「發送 Telegram 通知」(手動跑一次跟排程一樣的門檻檢查)。
+
+**只改前端外觀/邏輯時**,不用每次重新 build,另開一個 terminal 用 Vite 的開發伺服器(有熱更新):
+
+```bash
+cd frontend
+npm run dev    # 開 http://localhost:5173,API 請求會自動 proxy 到 :5050 的 Flask
+```
+
+Flask 那邊(`python3 app.py`)要保持在跑,因為它是真正打 Canvas API 的地方 —— Vite dev server 只負責前端畫面,不會自己讀 Chrome cookie。
+
 ## 檔案說明
 
 | 檔案 | 用途 |
 |---|---|
-| `main.py` | 主程式:抓課程/作業、比對截止日、發送 Telegram |
+| `main.py` | 核心邏輯:抓課程/作業/考試、比對截止日、發送 Telegram(CLI 與網頁面板共用) |
+| `app.py` | 網頁面板的後端,純 JSON API(`/api/state`、`/api/refresh`、`/api/notify`),同時 serve 前端 build 出來的靜態檔 |
+| `frontend/` | React 前端(Vite),原始碼在 `frontend/src/`,build 產物在 `frontend/dist/`(已加入 .gitignore) |
 | `config.example.json` | 設定檔範本 |
 | `config.json` | 你的真實設定(內含 token,已加入 .gitignore,不會被 git 追蹤) |
 | `state.json` | 記錄已發送過的提醒,避免重複通知(執行後自動產生) |
+| `dashboard_data.json` | 網頁面板的資料快取(已加入 .gitignore,內含你的真實課程/作業資料) |
 
 ## 安全性備註
 

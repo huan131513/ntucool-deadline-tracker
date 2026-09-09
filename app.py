@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-NTUCOOL Deadline Dashboard — a tiny local web UI on top of main.py.
+NTUCOOL Deadline Dashboard — JSON API backend for the React app in frontend/.
 
 Run it: python3 app.py, then open http://localhost:5050
-Click "重新整理" to trigger a fresh Canvas fetch (reads your Chrome cookie,
-same as the scheduled main.py run); click "發送 Telegram 通知" to run the
-same threshold check the hourly job does, on demand. Both update the page
-in place via fetch() — no full reload.
+It serves the built frontend (frontend/dist/, produced by `npm run build`
+inside frontend/) and answers the /api/* routes that frontend calls.
 
 Only meant to run on your own machine — it reads your local Chrome's cookie
 store, same constraint as main.py's "chrome" auth mode.
+
+Frontend dev workflow (hot reload instead of rebuilding each time):
+    cd frontend && npm run dev   # opens :5173, proxies /api to this server
+This server itself never needs restarting for frontend-only changes.
 """
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
-from flask import Flask, render_template_string
+from flask import Flask, jsonify, send_from_directory
 
 from main import (
     BASE_DIR,
@@ -26,9 +29,13 @@ from main import (
     run_notification_check,
 )
 
-app = Flask(__name__)
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 DATA_PATH = BASE_DIR / "dashboard_data.json"
 
+app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+
+
+# ---------------------------------------------------------------- snapshot --
 
 def load_snapshot():
     if DATA_PATH.exists():
@@ -104,8 +111,9 @@ def do_refresh():
     return snapshot
 
 
-KIND_LABEL = {"quiz": "測驗", "event": "行事曆", "new_quiz": "測驗"}
-
+# --------------------------------------------------------- view shaping ----
+# Urgency/day-left math stays server-side so the frontend is purely
+# presentational — it just renders whatever fields come back.
 
 def _urgency_rows(entries):
     now = datetime.now(timezone.utc)
@@ -135,23 +143,21 @@ def _urgency_rows(entries):
                 "days_str": days_str,
                 "urgency": urgency,
                 "html_url": e.get("html_url"),
-                "kind_label": KIND_LABEL.get(e.get("kind"), ""),
+                "kind": e.get("kind"),
                 "sort_key": days_left,
             }
         )
     rows.sort(key=lambda r: r["sort_key"])
+    for r in rows:
+        del r["sort_key"]
     return rows
 
 
-def build_view(snapshot, message=None):
-    """Everything the CONTENT_TEMPLATE needs to render. `message` is an
-    optional one-off {"text","category"} shown at the top — set by the
-    /api/* routes, never persisted, so it naturally disappears on the next
-    render instead of needing session/flash machinery."""
+def build_state(snapshot):
     if snapshot is None:
         return {
             "has_data": False, "ok": None, "error": None, "last_refresh": None,
-            "rows": [], "exam_rows": [], "hints": [], "message": message,
+            "assignments": [], "exams": [], "hints": [],
         }
 
     last_refresh = snapshot.get("last_refresh")
@@ -173,39 +179,38 @@ def build_view(snapshot, message=None):
         "ok": snapshot.get("ok"),
         "error": snapshot.get("error"),
         "last_refresh": last_refresh,
-        "rows": _urgency_rows(snapshot.get("assignments", [])),
-        "exam_rows": _urgency_rows(snapshot.get("exams", [])),
+        "assignments": _urgency_rows(snapshot.get("assignments", [])),
+        "exams": _urgency_rows(snapshot.get("exams", [])),
         "hints": hints,
-        "message": message,
     }
 
 
-@app.route("/")
-def index():
-    content_html = render_template_string(CONTENT_TEMPLATE, **build_view(load_snapshot()))
-    return render_template_string(PAGE_TEMPLATE, content_html=content_html)
+# --------------------------------------------------------------- API -------
+
+@app.route("/api/state")
+def api_state():
+    return jsonify(build_state(load_snapshot()))
 
 
 @app.route("/api/refresh", methods=["POST"])
 def api_refresh():
     snapshot = do_refresh()
-    message = (
+    state = build_state(snapshot)
+    state["message"] = (
         {"text": "已重新抓取 Canvas 資料。", "category": "ok"}
         if snapshot.get("ok")
         else {"text": f"抓取失敗:{snapshot.get('error')}", "category": "bad"}
     )
-    return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+    return jsonify(state)
 
 
 @app.route("/api/notify", methods=["POST"])
 def api_notify():
-    snapshot = load_snapshot()
     try:
         cfg = load_config()
         result = run_notification_check(cfg)
     except (ConfigError, AuthError) as e:
-        message = {"text": f"檢查失敗:{e}", "category": "bad"}
-        return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+        return jsonify({"message": {"text": f"檢查失敗:{e}", "category": "bad"}})
 
     if result["sent"]:
         names = "、".join(f"{s['course']}《{s['name']}》" for s in result["sent"])
@@ -214,227 +219,29 @@ def api_notify():
         message = {"text": f"{len(result['failed'])} 則提醒發送失敗,下次會重試。", "category": "bad"}
     else:
         message = {"text": "目前沒有進入提醒門檻、且尚未通知過的項目。", "category": "ok"}
-    return render_template_string(CONTENT_TEMPLATE, **build_view(snapshot, message))
+    return jsonify({"message": message})
 
 
-PAGE_TEMPLATE = """
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NTUCOOL 截止面板</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<style>
-:root{
-  --bg:#f6f3ec; --raise:#ffffff; --ink:#1c231f; --ink-soft:#52584f; --ink-faint:#8b9086;
-  --line:#dcd6c8; --accent:#1f5c42; --accent-soft:#e4ede2;
-  --crit:#b3412c; --crit-soft:#f7e2dd; --soon:#a15a1f; --soon-soft:#f3e6d5; --past:#7a7166; --past-soft:#e9e4d8;
-  --tele:#2a8fd6; --tele-ink:#e9f4fc;
-}
-/* Fixed light theme — intentionally ignores prefers-color-scheme. */
-html{ color-scheme: light; }
-*{ box-sizing:border-box; }
-body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font-family:'IBM Plex Sans', -apple-system, 'Noto Sans TC', sans-serif;
-}
-.wrap{ max-width:820px; margin:0 auto; padding:44px 24px 64px; display:flex; flex-direction:column; gap:26px; }
-header{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
-h1{
-  font-family:'Fraunces', 'Noto Serif TC', serif; font-weight:700; font-size:clamp(24px,3.4vw,32px);
-  margin:0; letter-spacing:-.01em;
-}
-.meta{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--ink-faint); margin-top:6px; }
-.actions{ display:flex; gap:10px; flex-wrap:wrap; }
-button{
-  font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:14.5px;
-  border:none; border-radius:10px; padding:11px 20px; cursor:pointer;
-  box-shadow:0 1px 2px rgba(0,0,0,.08); white-space:nowrap;
-}
-button.primary{ background:var(--accent); color:var(--accent-soft); }
-button.tele{ background:var(--tele); color:var(--tele-ink); }
-button:hover{ filter:brightness(1.08); }
-button:active{ filter:brightness(.96); }
-button:disabled{ opacity:.6; cursor:default; }
+# ------------------------------------------------------ serve built SPA ----
 
-.flash{ border-radius:12px; padding:13px 18px; font-size:14px; border:1px solid var(--line); }
-.flash.ok{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
-.flash.bad{ background:var(--crit-soft); color:var(--crit); border-color:var(--crit); }
+@app.route("/")
+def index():
+    if not (FRONTEND_DIST / "index.html").exists():
+        return (
+            "frontend/dist not found. Run: cd frontend && npm install && npm run build",
+            500,
+        )
+    return send_from_directory(app.static_folder, "index.html")
 
-.status{
-  display:flex; align-items:center; gap:10px;
-  background:var(--raise); border:1px solid var(--line); border-radius:12px; padding:14px 18px;
-  font-size:14px;
-}
-.dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-.dot.ok{ background:var(--accent); }
-.dot.bad{ background:var(--crit); }
-.dot.none{ background:var(--ink-faint); }
-.status .err{ color:var(--crit); }
 
-table{ width:100%; border-collapse:collapse; background:var(--raise); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
-thead th{
-  text-align:left; font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.06em;
-  text-transform:uppercase; color:var(--ink-faint); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--line);
-}
-tbody td{ padding:13px 16px; border-bottom:1px solid var(--line); font-size:14.5px; vertical-align:top; }
-tbody tr:last-child td{ border-bottom:none; }
-tbody tr:hover{ background:var(--accent-soft); }
-.course{ color:var(--ink-soft); font-size:13px; }
-.pill{
-  font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600;
-  padding:3px 9px; border-radius:20px; white-space:nowrap; display:inline-block;
-}
-.pill.critical{ color:var(--crit); background:var(--crit-soft); }
-.pill.soon{ color:var(--soon); background:var(--soon-soft); }
-.pill.past{ color:var(--past); background:var(--past-soft); }
-.pill.normal{ color:var(--ink-soft); background:var(--accent-soft); }
-a.link{ color:var(--accent); text-decoration:none; font-size:13px; }
-a.link:hover{ text-decoration:underline; }
-.empty{ padding:32px 20px; text-align:center; color:var(--ink-faint); font-size:14px; }
-table{ overflow-x:auto; display:block; }
-@media(min-width:1px){ table{ display:table; } .wrap{ overflow-x:auto; } }
-
-.section-head{ display:flex; align-items:baseline; gap:9px; }
-.section-head h2{
-  font-family:'Fraunces', serif; font-weight:600; font-size:19px; margin:0;
-}
-.section-head .count{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-faint); }
-.kind-tag{
-  font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.04em;
-  color:var(--ink-faint); background:var(--accent-soft); border-radius:5px; padding:1px 6px; margin-right:6px;
-}
-
-.hint-list{ display:flex; flex-direction:column; gap:10px; }
-.hint{
-  background:var(--raise); border:1px solid var(--line); border-left:3px solid var(--soon);
-  border-radius:0 10px 10px 0; padding:12px 16px; font-size:13.5px;
-}
-.hint .h-top{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-.hint .h-title{ font-weight:600; }
-.hint .h-meta{ color:var(--ink-faint); font-size:12px; font-family:'IBM Plex Mono', monospace; white-space:nowrap; }
-.hint .h-kw{ color:var(--soon); font-size:12px; margin-top:3px; }
-.disclaimer{ font-size:12.5px; color:var(--ink-faint); margin-top:-6px; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>NTUCOOL 截止面板</h1>
-    <div class="actions">
-      <button type="button" class="primary" onclick="trigger('/api/refresh', this)">↻ 重新整理</button>
-      <button type="button" class="tele" onclick="trigger('/api/notify', this)">✈ 發送 Telegram 通知</button>
-    </div>
-  </header>
-  <div id="content">{{ content_html|safe }}</div>
-</div>
-<script>
-async function trigger(url, btn) {
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '處理中…';
-  try {
-    const resp = await fetch(url, { method: 'POST' });
-    document.getElementById('content').innerHTML = await resp.text();
-  } catch (err) {
-    document.getElementById('content').insertAdjacentHTML(
-      'afterbegin', '<div class="flash bad">連線失敗,請確認 app.py 還在跑。</div>'
-    );
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-}
-</script>
-</body>
-</html>
-"""
-
-CONTENT_TEMPLATE = """
-{% if last_refresh %}<div class="meta">上次更新 {{ last_refresh }}</div>{% endif %}
-
-{% if message %}<div class="flash {{ message.category }}">{{ message.text }}</div>{% endif %}
-
-{% if not has_data %}
-  <div class="status"><span class="dot none"></span> 還沒有資料,點右上角「重新整理」抓一次。</div>
-{% elif ok %}
-  <div class="status"><span class="dot ok"></span> Canvas 連線正常</div>
-{% else %}
-  <div class="status"><span class="dot bad"></span> <span class="err">{{ error }}</span></div>
-{% endif %}
-
-{% if has_data %}
-<section>
-  <div class="section-head"><h2>作業</h2><span class="count">{{ rows|length }}</span></div>
-</section>
-{% if rows %}
-<table>
-  <thead><tr><th>作業</th><th>截止時間</th><th>剩餘</th></tr></thead>
-  <tbody>
-    {% for r in rows %}
-    <tr>
-      <td>
-        {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
-        <div class="course">{{ r.course }}</div>
-      </td>
-      <td>{{ r.due_str }}</td>
-      <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% elif ok %}
-  <div class="empty">目前所有課程都沒有設截止日的作業。</div>
-{% endif %}
-
-<section>
-  <div class="section-head"><h2>考試</h2><span class="count">{{ exam_rows|length }}</span></div>
-</section>
-{% if exam_rows %}
-<table>
-  <thead><tr><th>考試 / 測驗</th><th>時間</th><th>剩餘</th></tr></thead>
-  <tbody>
-    {% for r in exam_rows %}
-    <tr>
-      <td>
-        <span class="kind-tag">{{ r.kind_label }}</span>
-        {% if r.html_url %}<a class="link" href="{{ r.html_url }}" target="_blank">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}
-        <div class="course">{{ r.course }}</div>
-      </td>
-      <td>{{ r.due_str }}</td>
-      <td><span class="pill {{ r.urgency }}">{{ r.days_str }}</span></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% elif ok %}
-  <div class="empty">來自 Canvas 測驗(New Quizzes)與行事曆事件,目前查無資料。</div>
-{% endif %}
-
-<section>
-  <div class="section-head"><h2>公告中可能提到的考試</h2><span class="count">{{ hints|length }}</span></div>
-  <div class="disclaimer">關鍵字比對公告文字,不是結構化資料,請自行點進去確認日期是否正確。</div>
-</section>
-{% if hints %}
-<div class="hint-list">
-  {% for h in hints %}
-  <div class="hint">
-    <div class="h-top">
-      <span class="h-title">
-        {% if h.html_url %}<a class="link" href="{{ h.html_url }}" target="_blank">{{ h.title }}</a>{% else %}{{ h.title }}{% endif %}
-      </span>
-      <span class="h-meta">{{ h.course }} · {{ h.posted_str }}</span>
-    </div>
-    <div class="h-kw">命中關鍵字:「{{ h.matched_keyword }}」</div>
-  </div>
-  {% endfor %}
-</div>
-{% elif ok %}
-  <div class="empty">最近的公告裡沒有掃到考試相關字眼。</div>
-{% endif %}
-{% endif %}
-"""
+@app.route("/<path:path>")
+def spa(path):
+    if path.startswith("api/"):
+        return jsonify({"error": "not found"}), 404
+    candidate = Path(app.static_folder) / path
+    if candidate.is_file():
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, "index.html")
 
 
 if __name__ == "__main__":
