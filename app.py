@@ -25,7 +25,11 @@ from main import (
     ConfigError,
     collect_exams,
     collect_upcoming_assignments,
+    get_progress,
     load_config,
+    progress_done,
+    progress_start,
+    progress_step,
     run_notification_check,
     send_incomplete_digest,
 )
@@ -56,6 +60,7 @@ def do_refresh():
     prev = load_snapshot() or {}
     now_str = datetime.now().astimezone().isoformat()
 
+    progress_start("重新整理")
     try:
         cfg = load_config()
         items, _now = collect_upcoming_assignments(cfg)
@@ -63,6 +68,7 @@ def do_refresh():
     except (ConfigError, AuthError) as e:
         snapshot = {**prev, "last_refresh": now_str, "ok": False, "error": str(e)}
         save_snapshot(snapshot)
+        progress_done()
         return snapshot
 
     # New Quizzes (NTUCOOL's exam tool) come back from the Assignments API
@@ -109,6 +115,8 @@ def do_refresh():
         "hints": hints,
     }
     save_snapshot(snapshot)
+    progress_step("整理資料", "success", f"{len(assignment_items)} 筆作業、{len(all_exams)} 筆考試")
+    progress_done()
     return snapshot
 
 
@@ -193,6 +201,15 @@ def api_state():
     return jsonify(build_state(load_snapshot()))
 
 
+@app.route("/api/progress")
+def api_progress():
+    """Polled by the frontend to show live step-by-step status of whichever
+    Canvas fetch is currently running (or the most recent one) — regardless
+    of whether it was triggered by a button click or the hourly launchd job
+    hitting /api/notify in the background."""
+    return jsonify(get_progress())
+
+
 @app.route("/api/refresh", methods=["POST"])
 def api_refresh():
     snapshot = do_refresh()
@@ -265,4 +282,8 @@ def spa(path):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5050, debug=False)
+    # threaded=True matters here: a refresh/notify request can take several
+    # seconds (multiple sequential Canvas API calls), and without it the
+    # dev server would block GET /api/progress polls until that request
+    # finished — defeating the whole point of live progress.
+    app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)

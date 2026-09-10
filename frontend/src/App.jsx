@@ -1,15 +1,16 @@
 import AnnouncementHints from './components/AnnouncementHints.jsx'
 import DeadlineTable from './components/DeadlineTable.jsx'
+import ProgressPanel from './components/ProgressPanel.jsx'
 import StatusBanner from './components/StatusBanner.jsx'
 import { useDashboard } from './hooks/useDashboard.js'
 
 export default function App() {
-  const { state, message, loading, connectionError, refresh, notify } = useDashboard()
+  const { state, message, progress, loading, connectionError, refresh, notify } = useDashboard()
 
   return (
     <div className="wrap">
       <header>
-        <h1>NTUCOOL 截止面板</h1>
+        <h1>NTUCOOL 作業截止通知網站</h1>
         <div className="actions">
           <button type="button" className="primary" disabled={loading.refresh} onClick={refresh}>
             {loading.refresh ? '處理中…' : '↻ 重新整理'}
@@ -26,6 +27,8 @@ export default function App() {
         <div className="flash bad">連線失敗,請確認 app.py 還在跑。</div>
       )}
       {message && <div className={`flash ${message.category}`}>{message.text}</div>}
+
+      <ProgressPanel progress={progress} />
 
       <StatusBanner state={state} loadingInitial={loading.initial} />
 

@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -47,6 +48,59 @@ class AuthError(Exception):
     CLI (e.g. the web dashboard) can catch it and show a friendly status
     instead of the whole process dying mid-request.
     """
+
+
+# --------------------------------------------------------------------------
+# Progress tracking — a small in-process, thread-safe log of the steps in
+# the CURRENT (or most recently finished) Canvas fetch: checking the
+# cookie, calling the API, pulling each piece of data. Any caller
+# (a button click via app.py's /api/refresh, the launchd-triggered
+# /api/notify, the CLI) updates the same global state, and the web
+# dashboard polls it via GET /api/progress — so it reflects whichever
+# trigger is actually running right now, not just ones started from the
+# browser tab that's open.
+_progress_lock = threading.Lock()
+_progress_state = {"label": None, "steps": [], "running": False, "updated_at": None}
+
+
+def progress_start(label):
+    with _progress_lock:
+        _progress_state["label"] = label
+        _progress_state["steps"] = []
+        _progress_state["running"] = True
+        _progress_state["updated_at"] = datetime.now().astimezone().isoformat()
+
+
+def progress_step(name, status, detail=None):
+    """status: 'running' | 'success' | 'error'. Upserts by name — the same
+    step reported more than once (e.g. cookie/API checks run again for
+    collect_exams right after collect_upcoming_assignments) just updates
+    in place instead of appearing twice."""
+    with _progress_lock:
+        for s in _progress_state["steps"]:
+            if s["name"] == name:
+                s["status"] = status
+                s["detail"] = detail
+                break
+        else:
+            _progress_state["steps"].append({"name": name, "status": status, "detail": detail})
+        _progress_state["updated_at"] = datetime.now().astimezone().isoformat()
+
+
+def progress_done():
+    with _progress_lock:
+        _progress_state["running"] = False
+        _progress_state["updated_at"] = datetime.now().astimezone().isoformat()
+
+
+def get_progress():
+    with _progress_lock:
+        return {
+            "label": _progress_state["label"],
+            "running": _progress_state["running"],
+            "updated_at": _progress_state["updated_at"],
+            "steps": [dict(s) for s in _progress_state["steps"]],
+        }
 
 
 def log(msg, *, err=False):
@@ -117,11 +171,13 @@ def build_session(cfg):
     """
     session = requests.Session()
     auth_mode = cfg.get("canvas_auth_mode", "token")
+    progress_step("檢查登入憑證", "running", f"模式:{auth_mode}")
 
     if auth_mode == "chrome":
         try:
             import browser_cookie3
         except ImportError:
+            progress_step("檢查登入憑證", "error", "缺少 browser_cookie3 套件")
             raise ConfigError(
                 "canvas_auth_mode is 'chrome' but the 'browser_cookie3' package isn't "
                 "installed. Run: pip install browser_cookie3"
@@ -130,6 +186,7 @@ def build_session(cfg):
         try:
             cj = browser_cookie3.chrome(domain_name=domain)
         except Exception as e:
+            progress_step("檢查登入憑證", "error", f"讀取 Chrome cookie 失敗:{e}")
             raise AuthError(
                 f"Failed to read cookies from Chrome ({e}). Make sure Chrome is installed, "
                 f"you're logged into {domain} there, and you approve any macOS Keychain "
@@ -137,6 +194,7 @@ def build_session(cfg):
             )
         cookie_value = "; ".join(f"{c.name}={c.value}" for c in cj)
         if not cookie_value:
+            progress_step("檢查登入憑證", "error", f"Chrome 裡沒有 {domain} 的 cookie")
             raise AuthError(
                 f"No cookies found for {domain} in Chrome. Log into "
                 f"https://{domain} in Chrome first, then try again."
@@ -145,15 +203,18 @@ def build_session(cfg):
     elif auth_mode == "cookie":
         cookie_value = cfg.get("canvas_cookie", "")
         if not cookie_value:
+            progress_step("檢查登入憑證", "error", "config.json 缺少 canvas_cookie")
             raise ConfigError("canvas_auth_mode is 'cookie' but canvas_cookie is empty in config.json.")
         session.headers.update({"Cookie": cookie_value})
     else:
         token = cfg.get("canvas_access_token", "")
         if not token:
+            progress_step("檢查登入憑證", "error", "config.json 缺少 canvas_access_token")
             raise ConfigError("canvas_auth_mode is 'token' but canvas_access_token is empty in config.json.")
         session.headers.update({"Authorization": f"Bearer {token}"})
 
     session.headers.update({"Accept": "application/json"})
+    progress_step("檢查登入憑證", "success", f"模式:{auth_mode}")
     return session
 
 
@@ -230,16 +291,21 @@ def collect_exams(cfg):
     confidence) hits separately — see fetch_announcement_hints."""
     session = build_session(cfg)
 
+    progress_step("連接 Canvas 官方 API", "running")
     try:
         courses = fetch_courses(session, cfg)
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code in (401, 419):
+            progress_step("連接 Canvas 官方 API", "error", "Cookie 已過期(401/419)")
             raise AuthError(
                 "Canvas authentication failed (401/419). Your session cookie has "
                 "probably expired — log into cool.ntu.edu.tw again in Chrome."
             )
+        progress_step("連接 Canvas 官方 API", "error", str(e))
         raise
+    progress_step("連接 Canvas 官方 API", "success", f"{len(courses)} 門課程")
 
+    progress_step("抓取考試資料(測驗/行事曆)", "running")
     exams = []
     for course in courses:
         course_name = course.get("name") or course.get("course_code") or f"Course {course.get('id')}"
@@ -295,12 +361,15 @@ def collect_exams(cfg):
         )
 
     exams.sort(key=lambda x: x["due_at"])
+    progress_step("抓取考試資料(測驗/行事曆)", "success", f"{len(exams)} 筆")
 
+    progress_step("掃描公告關鍵字", "running")
     hints = []
     for course in courses:
         course_name = course.get("name") or course.get("course_code") or f"Course {course['id']}"
         hints.extend(fetch_announcement_hints(session, cfg, course["id"], course_name))
     hints.sort(key=lambda h: h.get("posted_at") or "", reverse=True)
+    progress_step("掃描公告關鍵字", "success", f"{len(hints)} 筆命中")
 
     return exams, hints
 
@@ -308,20 +377,25 @@ def collect_exams(cfg):
 def collect_upcoming_assignments(cfg):
     session = build_session(cfg)
 
+    progress_step("連接 Canvas 官方 API", "running")
     try:
         courses = fetch_courses(session, cfg)
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code in (401, 419):
             log("AUTH FAILED (401/419) — Chrome cookie is no longer valid.", err=True)
+            progress_step("連接 Canvas 官方 API", "error", "Cookie 已過期(401/419)")
             raise AuthError(
                 "Canvas authentication failed (401/419). Your session cookie has "
                 "probably expired — log into cool.ntu.edu.tw again in Chrome."
             )
+        progress_step("連接 Canvas 官方 API", "error", str(e))
         raise
 
     log(f"AUTH OK — {len(courses)} active course(s) fetched.")
+    progress_step("連接 Canvas 官方 API", "success", f"{len(courses)} 門課程")
     now = datetime.now(timezone.utc)
 
+    progress_step("抓取作業資料", "running")
     items = []
     for course in courses:
         course_name = course.get("name") or course.get("course_code") or f"Course {course.get('id')}"
@@ -358,6 +432,7 @@ def collect_upcoming_assignments(cfg):
             )
 
     items.sort(key=lambda x: (x["due_at"] is None, x["due_at"]))
+    progress_step("抓取作業資料", "success", f"{len(items)} 筆")
     return items, now
 
 
@@ -415,16 +490,28 @@ def send_incomplete_digest(cfg, dry_run=False):
     web dashboard's manual "發送 Telegram 通知" button; the scheduled
     launchd job keeps using run_notification_check() below instead, so
     the hourly automation still only pings you near an actual deadline."""
-    items, now = collect_upcoming_assignments(cfg)
+    progress_start("發送未完成作業清單")
+    try:
+        items, now = collect_upcoming_assignments(cfg)
+    except (ConfigError, AuthError):
+        progress_done()
+        raise
     message = build_incomplete_digest_message(items, now)
 
     print(f"--- digest ---\n{message}\n")
     if dry_run:
+        progress_step("發送 Telegram", "success", "dry-run,未實際發送")
+        progress_done()
         return {"sent": False, "count": len(items), "message": message}
 
+    progress_step("發送 Telegram", "running")
     ok = send_telegram(cfg, message)
     if not ok:
         log("Telegram digest send failed.", err=True)
+        progress_step("發送 Telegram", "error", "Telegram API 回應失敗")
+    else:
+        progress_step("發送 Telegram", "success", f"{len(items)} 筆作業")
+    progress_done()
     return {"sent": ok, "count": len(items), "message": message}
 
 
@@ -438,10 +525,16 @@ def run_notification_check(cfg, dry_run=False):
     Returns {"candidates": [...], "sent": [...], "failed": [...]} so
     callers can report what happened without re-deriving it from stdout.
     """
-    items, now = collect_upcoming_assignments(cfg)
+    progress_start("排程門檻檢查")
+    try:
+        items, now = collect_upcoming_assignments(cfg)
+    except (ConfigError, AuthError):
+        progress_done()
+        raise
     thresholds = sorted(cfg.get("remind_before_days", [7, 3, 1]))
     state = load_state(cfg.get("state_file", "state.json"))
 
+    progress_step("比對門檻", "running", f"門檻:{thresholds} 天")
     to_send = []
     for it in items:
         if it["due_at"] is None:
@@ -455,6 +548,7 @@ def run_notification_check(cfg, dry_run=False):
             if days_left <= threshold and key not in state["notified"]:
                 to_send.append((key, it, threshold, days_left))
                 break  # only notify for the nearest crossed threshold per run
+    progress_step("比對門檻", "success", f"{len(to_send)} 筆需要提醒")
 
     sent, failed = [], []
     for key, it, threshold, days_left in to_send:
@@ -485,6 +579,13 @@ def run_notification_check(cfg, dry_run=False):
     if not dry_run and sent:
         save_state(cfg.get("state_file", "state.json"), state)
 
+    if to_send:
+        progress_step(
+            "發送 Telegram",
+            "error" if failed and not sent else "success",
+            f"成功 {len(sent)} 筆" + (f",失敗 {len(failed)} 筆" if failed else ""),
+        )
+    progress_done()
     return {"candidates": to_send, "sent": sent, "failed": failed}
 
 
@@ -494,7 +595,6 @@ def cmd_check(cfg, dry_run=False):
         log("No new deadline reminders to send.")
     elif result["sent"]:
         log(f"Sent {len(result['sent'])} reminder(s).")
-        log(f"Sent {sent_count} reminder(s).")
 
 
 def main():
