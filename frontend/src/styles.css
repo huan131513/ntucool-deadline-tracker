@@ -180,6 +180,9 @@ tbody tr:last-child td {
 tbody tr:hover {
   background: var(--accent-soft);
 }
+tbody tr.row-link {
+  cursor: pointer;
+}
 .course {
   color: var(--ink-soft);
   font-size: 13px;

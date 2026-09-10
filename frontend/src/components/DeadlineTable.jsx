@@ -24,11 +24,21 @@ export default function DeadlineTable({ title, itemLabel, rows, emptyText, showK
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i}>
+              <tr
+                key={i}
+                className={r.html_url ? 'row-link' : ''}
+                onClick={() => r.html_url && window.open(r.html_url, '_blank', 'noopener')}
+              >
                 <td>
                   {showKind && r.kind && <span className="kind-tag">{KIND_LABEL[r.kind] ?? ''}</span>}
                   {r.html_url ? (
-                    <a className="link" href={r.html_url} target="_blank" rel="noreferrer">
+                    <a
+                      className="link"
+                      href={r.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {r.name}
                     </a>
                   ) : (
