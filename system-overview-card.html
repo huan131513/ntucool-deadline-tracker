@@ -1,0 +1,441 @@
+<title>截止提醒運作全貌</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg: #f6f3ec;
+  --bg-raise: #ffffff;
+  --ink: #1c231f;
+  --ink-soft: #52584f;
+  --ink-faint: #8b9086;
+  --line: #dcd6c8;
+  --accent: #1f5c42;
+  --accent-ink: #f3f7f0;
+  --accent-soft: #e4ede2;
+  --tele: #2a8fd6;
+  --tele-soft: #e4f0fa;
+  --warn: #a15a1f;
+  --warn-soft: #f3e6d5;
+  --warn-line: #e0c9a2;
+  --shadow: 0 1px 2px rgba(28,35,31,.04), 0 8px 24px -12px rgba(28,35,31,.14);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg: #141a16;
+    --bg-raise: #1b2320;
+    --ink: #eef1ea;
+    --ink-soft: #a9b0a4;
+    --ink-faint: #6c756c;
+    --line: #2c352f;
+    --accent: #6fbd93;
+    --accent-ink: #0d2117;
+    --accent-soft: #1f2e26;
+    --tele: #6cb6ea;
+    --tele-soft: #1a2733;
+    --warn: #d9a15f;
+    --warn-soft: #2c2419;
+    --warn-line: #47341f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --bg: #141a16;
+  --bg-raise: #1b2320;
+  --ink: #eef1ea;
+  --ink-soft: #a9b0a4;
+  --ink-faint: #6c756c;
+  --line: #2c352f;
+  --accent: #6fbd93;
+  --accent-ink: #0d2117;
+  --accent-soft: #1f2e26;
+  --tele: #6cb6ea;
+  --tele-soft: #1a2733;
+  --warn: #d9a15f;
+  --warn-soft: #2c2419;
+  --warn-line: #47341f;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+}
+
+*{ box-sizing: border-box; }
+body{
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', -apple-system, 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap{
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 56px 28px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 44px;
+}
+
+/* header */
+header{ display:flex; flex-direction:column; gap:10px; }
+.eyebrow{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+h1{
+  font-family:'Fraunces', 'Noto Serif TC', serif;
+  font-weight: 600;
+  font-size: clamp(30px, 4.4vw, 42px);
+  line-height: 1.12;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -.01em;
+}
+.sub{
+  font-size: 15.5px;
+  color: var(--ink-soft);
+  max-width: 60ch;
+  line-height: 1.65;
+}
+.sub code{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: .92em;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* clock */
+.clockrow{
+  display:grid;
+  grid-template-columns: 132px 1fr;
+  gap: 28px;
+  align-items: center;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 26px;
+  box-shadow: var(--shadow);
+}
+.clockrow svg{ display:block; }
+.clock-face{ fill: none; stroke: var(--line); stroke-width: 1.5; }
+.clock-tick{ stroke: var(--ink-faint); stroke-width: 2; stroke-linecap: round; }
+.clock-tick.hit{ stroke: var(--accent); stroke-width: 2.75; }
+.clock-hand{ stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.clock-hub{ fill: var(--accent); }
+.clock-copy .k{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.clock-copy .v{
+  font-family:'Fraunces', serif;
+  font-weight: 600;
+  font-size: 24px;
+  margin: 3px 0 6px;
+}
+.clock-copy .d{
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  max-width: 46ch;
+}
+
+/* pipeline */
+.pipeline{ display:flex; flex-direction:column; gap:0; position:relative; }
+.step{
+  display:grid;
+  grid-template-columns: 40px 1fr;
+  gap: 20px;
+  padding-bottom: 30px;
+  position: relative;
+}
+.step:last-child{ padding-bottom: 0; }
+.rail{
+  position:relative;
+  display:flex;
+  justify-content:center;
+}
+.rail::before{
+  content:"";
+  position:absolute;
+  top: 40px;
+  bottom: -30px;
+  width: 2px;
+  background: var(--line);
+}
+.step:last-child .rail::before{ display:none; }
+.node{
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--bg-raise);
+  border: 1.5px solid var(--line);
+  display:flex; align-items:center; justify-content:center;
+  color: var(--accent);
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+}
+.node svg{ width:18px; height:18px; }
+.step.tele .node{ color: var(--tele); }
+.step-body{
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+.step-top{
+  display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.step-title{ font-weight: 600; font-size: 16px; }
+.step-tag{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.step.tele .step-tag{ color: var(--tele); background: var(--tele-soft); }
+.step-desc{
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+  margin-top: 6px;
+  max-width: 62ch;
+}
+
+/* notes */
+.notes-head{ display:flex; flex-direction:column; gap: 6px; }
+.notes-head h2{
+  font-family:'Fraunces', serif;
+  font-weight: 600;
+  font-size: 21px;
+  margin: 0;
+}
+.notes-head p{ font-size: 14px; color: var(--ink-soft); margin: 0; }
+.notes-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.note{
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-line);
+  border-radius: 13px;
+  padding: 16px 18px;
+  display:flex; flex-direction:column; gap:7px;
+}
+.note .n-head{ display:flex; align-items:center; gap:9px; }
+.note svg{ width:16px; height:16px; color: var(--warn); flex-shrink:0; }
+.note .n-title{ font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.note .n-body{ font-size: 13.3px; color: var(--ink-soft); line-height: 1.6; }
+.note .n-body code{
+  font-family:'IBM Plex Mono', monospace;
+  font-size: .93em;
+  color: var(--warn);
+}
+
+footer{
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+  font-family:'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+</style>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">系統運作說明 · ntucool-deadline-tracker</span>
+    <h1>從 Chrome 登入狀態<br>到手機上的一則截止提醒</h1>
+    <p class="sub">
+      系統不存密碼、不呼叫爬蟲——每一步都走 Canvas 官方 <code>/api/v1/</code> 端點,認證來源是你本機
+      Chrome 裡「當下」的登入狀態。以下是它每小時整點在背景做的事,以及使用上該注意的地方。
+    </p>
+  </header>
+
+  <div class="clockrow">
+    <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+      <circle class="clock-face" cx="60" cy="60" r="52"/>
+      <g id="ticks"></g>
+      <line class="clock-hand" x1="60" y1="60" x2="60" y2="26"/>
+      <line class="clock-hand" x1="60" y1="60" x2="84" y2="60" stroke-width="2.25"/>
+      <circle class="clock-hub" cx="60" cy="60" r="4"/>
+    </svg>
+    <div class="clock-copy">
+      <div class="k">Trigger · launchd StartInterval</div>
+      <div class="v">每小時整點觸發一次</div>
+      <div class="d">
+        一天執行 24 次,取代「偵測登入瞬間」——反正每次都即時讀當下 session,
+        間隔一小時就等於「你登入後最慢 1 小時內會被抓到」,不需要額外常駐服務或瀏覽器書籤。
+      </div>
+    </div>
+  </div>
+
+  <section class="pipeline">
+
+    <div class="step">
+      <div class="rail"><div class="node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 4v5"/></svg>
+      </div></div>
+      <div class="step-body">
+        <div class="step-top">
+          <span class="step-title">你在 Chrome 保持登入 NTUCOOL</span>
+          <span class="step-tag">前提條件</span>
+        </div>
+        <div class="step-desc">
+          不用刻意每天登入——只要 session cookie 還活著,平常瀏覽網頁就會延續它。這是整套系統唯一需要「人」介入的環節。
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      </div></div>
+      <div class="step-body">
+        <div class="step-top">
+          <span class="step-title">launchd 準時喚醒 main.py</span>
+          <span class="step-tag">每小時 · :00</span>
+        </div>
+        <div class="step-desc">
+          macOS 排程服務,比 cron 更能配合電腦睡眠/喚醒。執行結果寫進 <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--accent)">launchd.log</code> 方便回頭查。
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+      </div></div>
+      <div class="step-body">
+        <div class="step-top">
+          <span class="step-title">讀取 Chrome cookie,打官方 Canvas API</span>
+          <span class="step-tag">GET /api/v1/…</span>
+        </div>
+        <div class="step-desc">
+          用 <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--accent)">browser_cookie3</code> 即時從本機 Chrome 讀 session,依序打 <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--accent)">/courses</code> 與每門課的 <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--accent)">/assignments</code>,全程不儲存密碼。
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9M12 19V5M20 19v-7"/><path d="M2 19h20"/></svg>
+      </div></div>
+      <div class="step-body">
+        <div class="step-top">
+          <span class="step-title">比對截止日門檻,查重複記錄</span>
+          <span class="step-tag">7 / 3 / 1 天</span>
+        </div>
+        <div class="step-desc">
+          剩餘天數落入門檻,且 <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--accent)">state.json</code> 裡還沒發過,才會進到下一步——同一個門檻只提醒一次,不會因為每小時跑而洗版。
+        </div>
+      </div>
+    </div>
+
+    <div class="step tele">
+      <div class="rail"><div class="node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 3L2 11l6 2.5M21 3l-4 18-8-6.5M21 3L9.5 14.5"/></svg>
+      </div></div>
+      <div class="step-body">
+        <div class="step-top">
+          <span class="step-title">Telegram Bot 發出提醒</span>
+          <span class="step-tag">課程 · 作業 · 截止時間</span>
+        </div>
+        <div class="step-desc">
+          訊息內容含課程名稱、作業名稱、截止時間與剩餘天數,直接送到你手機上的 Telegram 對話。
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <section>
+    <div class="notes-head">
+      <h2>使用上要注意的五件事</h2>
+      <p>這些不是理論上的邊界情況,是實際測試時就會遇到的限制。</p>
+    </div>
+    <div class="notes-grid">
+
+      <div class="note">
+        <div class="n-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span class="n-title">只能在這台 Mac 本機跑</span>
+        </div>
+        <div class="n-body">認證靠讀取本機 Chrome 的 cookie 存放區,無法部署到 Vercel 等雲端服務——那裡碰不到你的瀏覽器資料。</div>
+      </div>
+
+      <div class="note">
+        <div class="n-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span class="n-title">Mac 睡眠時排程會被跳過</span>
+        </div>
+        <div class="n-body">跳過的那次不會補跑,下次開機後要等到下一個整點才會再執行。</div>
+      </div>
+
+      <div class="note">
+        <div class="n-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span class="n-title">只認正式的 Canvas「作業」</span>
+        </div>
+        <div class="n-body">老師寫在公告、Syllabus、Pages 文字裡的截止日不是結構化資料,系統抓不到,只有掛在「作業」分頁下的才算。</div>
+      </div>
+
+      <div class="note">
+        <div class="n-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span class="n-title">cookie 失效時不會發假通知</span>
+        </div>
+        <div class="n-body">遇到 401/419 會直接報錯提示「請重新登入」,而不是安靜失敗或送出錯誤資訊。</div>
+      </div>
+
+      <div class="note">
+        <div class="n-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <span class="n-title">cookie 的敏感度等同密碼</span>
+        </div>
+        <div class="n-body"><code>config.json</code> 已加入 <code>.gitignore</code>,但這串值本身足以冒用你的登入狀態,不要貼到任何地方。</div>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <span>main.py · README.md</span>
+    <span>github.com/huan131513/ntucool-deadline-tracker</span>
+  </footer>
+
+</div>
+
+<script>
+  const ticksEl = document.getElementById('ticks');
+  const cx = 60, cy = 60, rOuter = 52, rInnerMajor = 43, rInnerMinor = 46;
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
+    const major = i % 3 === 0;
+    const rIn = major ? rInnerMajor : rInnerMinor;
+    const x1 = cx + rOuter * Math.cos(angle);
+    const y1 = cy + rOuter * Math.sin(angle);
+    const x2 = cx + rIn * Math.cos(angle);
+    const y2 = cy + rIn * Math.sin(angle);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1.toFixed(2));
+    line.setAttribute('y1', y1.toFixed(2));
+    line.setAttribute('x2', x2.toFixed(2));
+    line.setAttribute('y2', y2.toFixed(2));
+    line.setAttribute('class', 'clock-tick' + (major ? ' hit' : ''));
+    ticksEl.appendChild(line);
+  }
+</script>
