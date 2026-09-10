@@ -133,15 +133,26 @@ button:disabled {
   height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+  animation: dot-breathe 2.2s ease-in-out infinite;
 }
 .dot.ok {
   background: var(--accent);
+  color: var(--accent);
 }
 .dot.bad {
   background: var(--crit);
+  color: var(--crit);
 }
 .dot.none {
   background: var(--ink-faint);
+  color: var(--ink-faint);
+}
+@keyframes dot-breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.55; box-shadow: 0 0 6px 1px currentColor; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot { animation: none; }
 }
 .status .err {
   color: var(--crit);
