@@ -1,5 +1,6 @@
 import AnnouncementHints from './components/AnnouncementHints.jsx'
 import DeadlineTable from './components/DeadlineTable.jsx'
+import MiniCalendar from './components/MiniCalendar.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
 import StatusBanner from './components/StatusBanner.jsx'
 import { useDashboard } from './hooks/useDashboard.js'
@@ -28,9 +29,13 @@ export default function App() {
       )}
       {message && <div className={`flash ${message.category}`}>{message.text}</div>}
 
-      <ProgressPanel progress={progress} />
-
-      <StatusBanner state={state} loadingInitial={loading.initial} />
+      <div className="top-grid">
+        <div className="top-left">
+          <ProgressPanel progress={progress} />
+          <StatusBanner state={state} loadingInitial={loading.initial} />
+        </div>
+        <MiniCalendar assignments={state?.assignments} exams={state?.exams} />
+      </div>
 
       {state?.has_data && (
         <>
