@@ -8,6 +8,11 @@
     <key>ProgramArguments</key>
     <array>
         <string>/ABSOLUTE/PATH/TO/ntucool-deadline-tracker/.venv/bin/python3</string>
+        <!-- -u: unbuffered stdout/stderr. Without it, print()/log() output
+             sits in Python's internal buffer indefinitely for a long-lived
+             process whose output isn't a terminal — web.log would silently
+             miss every AUTH OK/FAILED line even though the code ran. -->
+        <string>-u</string>
         <string>/ABSOLUTE/PATH/TO/ntucool-deadline-tracker/app.py</string>
     </array>
 

@@ -101,6 +101,15 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.ntucool-not
 
 > ⚠️ **限制**:`"chrome"` 模式只能在這台裝有 Chrome 的電腦本機執行,無法部署到 Vercel 等雲端服務(讀不到你本機的瀏覽器資料)。
 
+> ⚠️ **`ProgramArguments` 裡的 `-u` 不要拿掉**:那是讓 Python 用「無緩衝」模式輸出。少了它,`app.py` 是個一直不會結束的常駐行程,`print()`/`log()` 的內容會卡在記憶體緩衝區裡,`web.log` 可能永遠看不到任何一行 AUTH OK/FAILED 紀錄,即使程式其實跑得正常——這是實際踩過的坑,錯誤現象很隱蔽(服務看起來正常運作,就是 log 是空的)。
+
+### 想看存取 Canvas 的紀錄?
+
+```bash
+tail -f web.log                              # 即時看全部輸出
+grep -E "AUTH|Telegram|reminder|digest" web.log   # 篩掉每次前端輪詢 /api/progress 的雜訊,只看真正存取資料/發送通知的事件
+```
+
 ## 6. 網頁面板(React + Flask)
 
 除了排程自動提醒,還有一個本機網頁面板可以手動觸發抓取、看作業/考試清單、手動發 Telegram 通知。前端是 React(Vite 建置),後端是 Flask 純 JSON API。
