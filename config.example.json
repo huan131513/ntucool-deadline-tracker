@@ -7,8 +7,9 @@
   "canvas_cookie": "",
   "canvas_access_token": "",
 
-  "telegram_bot_token": "PASTE_YOUR_TELEGRAM_BOT_TOKEN_HERE",
-  "telegram_chat_id": "PASTE_YOUR_TELEGRAM_CHAT_ID_HERE",
+  "_comment_telegram": "Optional. Leave both blank ('') to skip Telegram entirely — the dashboard, refresh, and CLI --list still work fine; only the notify button/hourly reminder are skipped.",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
 
   "remind_before_days": [7, 3, 1],
   "include_courses_without_due_date": false,

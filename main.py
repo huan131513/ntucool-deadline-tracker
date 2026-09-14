@@ -439,7 +439,18 @@ def collect_upcoming_assignments(cfg):
     return items, now
 
 
+def telegram_configured(cfg):
+    """Telegram is optional. Everything else — the web dashboard, /api/refresh,
+    `python3 main.py --list` — works fine without it; only the two send paths
+    below (send_incomplete_digest, run_notification_check) check this and skip
+    sending (instead of crashing on a missing config key) when it's unset."""
+    return bool(cfg.get("telegram_bot_token")) and bool(cfg.get("telegram_chat_id"))
+
+
 def send_telegram(cfg, text):
+    if not telegram_configured(cfg):
+        print("  [warn] telegram_bot_token/telegram_chat_id not set — skipping send", file=sys.stderr)
+        return False
     token = cfg["telegram_bot_token"]
     chat_id = cfg["telegram_chat_id"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -494,6 +505,10 @@ def send_incomplete_digest(cfg, dry_run=False):
     launchd job keeps using run_notification_check() below instead, so
     the hourly automation still only pings you near an actual deadline."""
     progress_start("發送未完成作業清單")
+    if not telegram_configured(cfg):
+        progress_step("發送 Telegram", "success", "未設定 Telegram,已略過發送")
+        progress_done()
+        return {"sent": False, "count": 0, "message": None, "skipped": True}
     try:
         items, now = collect_upcoming_assignments(cfg)
     except (ConfigError, AuthError):
@@ -529,6 +544,10 @@ def run_notification_check(cfg, dry_run=False):
     callers can report what happened without re-deriving it from stdout.
     """
     progress_start("排程門檻檢查")
+    if not telegram_configured(cfg):
+        progress_step("排程門檻檢查", "success", "未設定 Telegram,已略過")
+        progress_done()
+        return {"candidates": [], "sent": [], "failed": [], "skipped": True}
     try:
         items, now = collect_upcoming_assignments(cfg)
     except (ConfigError, AuthError):
@@ -594,7 +613,9 @@ def run_notification_check(cfg, dry_run=False):
 
 def cmd_check(cfg, dry_run=False):
     result = run_notification_check(cfg, dry_run=dry_run)
-    if not result["candidates"]:
+    if result.get("skipped"):
+        log("telegram_bot_token/telegram_chat_id not set in config.json — skipping notification check.")
+    elif not result["candidates"]:
         log("No new deadline reminders to send.")
     elif result["sent"]:
         log(f"Sent {len(result['sent'])} reminder(s).")

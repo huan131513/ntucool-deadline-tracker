@@ -16,7 +16,13 @@ export default function App() {
           <button type="button" className="primary" disabled={loading.refresh} onClick={refresh}>
             {loading.refresh ? '處理中…' : '↻ 重新整理'}
           </button>
-          <button type="button" className="tele" disabled={loading.notify} onClick={notify}>
+          <button
+            type="button"
+            className="tele"
+            disabled={loading.notify || state?.telegram_configured === false}
+            title={state?.telegram_configured === false ? 'config.json 尚未設定 telegram_bot_token / telegram_chat_id' : undefined}
+            onClick={notify}
+          >
             {loading.notify ? '處理中…' : '✈ 發送 Telegram 通知'}
           </button>
         </div>

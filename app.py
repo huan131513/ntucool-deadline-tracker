@@ -32,6 +32,7 @@ from main import (
     progress_step,
     run_notification_check,
     send_incomplete_digest,
+    telegram_configured,
 )
 
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -207,7 +208,14 @@ def build_state(snapshot):
 
 @app.route("/api/state")
 def api_state():
-    return jsonify(build_state(load_snapshot()))
+    state = build_state(load_snapshot())
+    # Telegram is optional — the frontend uses this to grey out the notify
+    # button instead of letting the click fail with a confusing error.
+    try:
+        state["telegram_configured"] = telegram_configured(load_config())
+    except ConfigError:
+        state["telegram_configured"] = False
+    return jsonify(state)
 
 
 @app.route("/api/progress")
@@ -239,7 +247,9 @@ def api_notify():
     except (ConfigError, AuthError) as e:
         return jsonify({"message": {"text": f"檢查失敗:{e}", "category": "bad"}})
 
-    if result["sent"]:
+    if result.get("skipped"):
+        message = {"text": "尚未設定 Telegram(config.json 缺 telegram_bot_token/telegram_chat_id),已略過通知。", "category": "ok"}
+    elif result["sent"]:
         names = "、".join(f"{s['course']}《{s['name']}》" for s in result["sent"])
         message = {"text": f"已發送 {len(result['sent'])} 則 Telegram 提醒:{names}", "category": "ok"}
     elif result["failed"]:
@@ -261,7 +271,9 @@ def api_notify_digest():
     except (ConfigError, AuthError) as e:
         return jsonify({"message": {"text": f"發送失敗:{e}", "category": "bad"}})
 
-    if result["sent"]:
+    if result.get("skipped"):
+        message = {"text": "尚未設定 Telegram(config.json 缺 telegram_bot_token/telegram_chat_id),已略過發送。", "category": "ok"}
+    elif result["sent"]:
         message = {"text": f"已發送未完成作業清單(共 {result['count']} 筆)。", "category": "ok"}
     else:
         message = {"text": "發送失敗,請確認 Telegram 設定。", "category": "bad"}

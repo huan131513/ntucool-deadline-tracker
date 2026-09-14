@@ -8,7 +8,7 @@
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面順序設定一次:
 
 1. 準備好 Python 3 環境、裝好套件(`pip install -r requirements.txt`)
-2. 建立自己的 `config.json`(複製 `config.example.json`),填入自己的 Telegram bot token / chat id
+2. 建立自己的 `config.json`(複製 `config.example.json`)。Telegram bot token / chat id 是選配,留空也能用網頁面板,只是不會發通知
 3. 用 Chrome 登入一次 NTUCOOL(讓本機瀏覽器有有效的登入 session)
 4. `npm install && npm run build` build 一次前端
 5. 執行 `python3 app.py`,打開 http://localhost:5050 手動操作,或依照第 5 節設定 macOS `launchd` 排程自動執行
@@ -83,7 +83,9 @@ React 前端 fetch("/api/state") 拿到的是「整理過的作業/考試資料�
 
 如果你的 Canvas 站台其實有開放個人 Access Token,把 `canvas_auth_mode` 改成 `"token"` 並填 `canvas_access_token` 即可。
 
-## 2. 建立 Telegram Bot
+## 2. 建立 Telegram Bot(選配)
+
+> Telegram 通知是**選配功能**。`config.json` 裡的 `telegram_bot_token` / `telegram_chat_id` 留空(`""`)即可 —— 網頁面板、`重新整理`、作業/考試列表、日曆等其他功能都不受影響,只有「發送 Telegram 通知」按鈕會自動變成灰色不可點(滑鼠移上去會顯示原因),排程的門檻通知也會自動略過,不會報錯。如果只是想先體驗網頁面板,可以跳過這一整節直接到[第 3 節](#3-設定專案)。
 
 1. Telegram 搜尋 **@BotFather**,傳送 `/newbot`,依指示取得 **bot token**
 2. 跟你剛建立的 bot 說一句話(例如 `/start`),讓它能傳訊給你
