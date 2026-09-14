@@ -193,6 +193,29 @@ tbody td {
   font-size: 14.5px;
   vertical-align: top;
 }
+/* Narrow screens: the 4-column table (作業/截止時間/剩餘/狀態) doesn't fit
+   327px (.wrap's content width at 375px viewports) at full padding/size —
+   it overflows .table-wrap's scroll area with no visible scrollbar on
+   touch devices, which reads as a broken layout rather than "swipe to see
+   more". Tighten padding/font size and let the two pill columns wrap
+   instead of forcing nowrap, so it fits without needing to scroll. */
+@media (max-width: 640px) {
+  thead th {
+    padding: 10px 8px;
+    font-size: 10.5px;
+  }
+  tbody td {
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+  /* `tbody .pill` (not just `.pill`) so this outranks the unconditional
+     .pill rule defined later in the file — same media-query-vs-source-order
+     gotcha as elsewhere: a later plain .pill{white-space:nowrap} would
+     otherwise win the cascade regardless of this @media match. */
+  tbody .pill {
+    white-space: normal;
+  }
+}
 tbody tr:last-child td {
   border-bottom: none;
 }
