@@ -4,7 +4,7 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 // _urgency_rows), so the color language stays consistent with the
 // tables below.
 const URGENCY_PRIORITY = { critical: 0, soon: 1, past: 2, normal: 3 }
-const KIND_TAG = { assignment: '作', exam: '考' }
+const KIND_TAG = { assignment: '作業', exam: '考試' }
 
 function buildMonthGrid(year, month) {
   const startWeekday = new Date(year, month, 1).getDay()
