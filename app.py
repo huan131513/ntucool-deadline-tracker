@@ -99,6 +99,7 @@ def do_refresh():
                 "name": it["name"],
                 "due_at": it["due_at"].isoformat() if it["due_at"] else None,
                 "html_url": it["html_url"],
+                "completed": bool(it.get("has_submitted")),
             }
             for it in assignment_items
         ],
@@ -153,6 +154,9 @@ def _urgency_rows(entries):
                 "urgency": urgency,
                 "html_url": e.get("html_url"),
                 "kind": e.get("kind"),
+                # Only assignment rows carry this (see do_refresh) — exams
+                # don't track a per-user submission state the same way.
+                "completed": e.get("completed"),
                 "sort_key": days_left,
             }
         )

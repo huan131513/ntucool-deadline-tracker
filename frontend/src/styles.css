@@ -223,6 +223,14 @@ tbody tr.row-link {
   color: var(--ink-soft);
   background: var(--accent-soft);
 }
+.pill.done {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.pill.todo {
+  color: var(--ink-faint);
+  background: var(--past-soft);
+}
 a.link {
   color: var(--accent);
   text-decoration: none;

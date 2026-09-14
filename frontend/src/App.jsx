@@ -45,6 +45,7 @@ export default function App() {
             rows={state.assignments}
             emptyText="無資料"
             showKind={false}
+            showCompleted={true}
             ok={state.ok}
           />
           <DeadlineTable

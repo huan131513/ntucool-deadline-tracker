@@ -226,7 +226,10 @@ def fetch_courses(session, cfg):
 
 
 def fetch_assignments(session, cfg, course_id):
-    params = {"per_page": 100, "order_by": "due_at"}
+    # include[]=submission pulls your own submission status alongside each
+    # assignment (workflow_state) so we can show 已完成/未完成 without an
+    # extra API call per assignment.
+    params = {"per_page": 100, "order_by": "due_at", "include[]": "submission"}
     return canvas_get(
         session, cfg["canvas_base_url"], f"/api/v1/courses/{course_id}/assignments", params
     )
