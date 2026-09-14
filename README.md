@@ -5,15 +5,62 @@
 
 ## 使用說明(快速上手)
 
-這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面順序設定一次:
+這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面步驟設定一次,全部指令都在專案根目錄下執行。整個流程大約 10~15 分鐘,做完就能用網頁面板手動操作(不裝 Telegram、不設定自動排程也完全沒問題,見下方[系統限制](#系統限制))。
 
-1. 準備好 Python 3 環境、裝好套件(`pip install -r requirements.txt`)
-2. 建立自己的 `config.json`(複製 `config.example.json`)。Telegram bot token / chat id 是選配,留空也能用網頁面板,只是不會發通知
-3. 用 Chrome 登入一次 NTUCOOL(讓本機瀏覽器有有效的登入 session)
-4. `npm install && npm run build` build 一次前端
-5. 執行 `python3 app.py`,打開 http://localhost:5050 手動操作,或依照第 5 節設定 macOS `launchd` 排程自動執行
+### Step 0. 前置需求
 
-完整步驟見下方第 1~6 節。整個流程大約 10~15 分鐘可以跑起來。
+- **Chrome 瀏覽器**,而且平常會用它登入 NTUCOOL(`"chrome"` 認證模式要讀它的 cookie)
+- **Python 3**(`python3 --version` 確認有裝)
+- **Node.js / npm**(build 前端要用,`node -v` 確認有裝)
+- 目前僅在 **macOS** 上驗證過完整流程(排程自動化那部分僅支援 macOS,其他部分理論上 Windows/Linux 也能跑,但沒實測過)
+
+### Step 1. 下載專案、安裝 Python 套件
+
+```bash
+git clone https://github.com/huan131513/ntucool-deadline-tracker.git
+cd ntucool-deadline-tracker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Step 2. 建立自己的設定檔
+
+```bash
+cp config.example.json config.json
+```
+
+打開 `config.json` 編輯:
+- `canvas_auth_mode` 保持 `"chrome"` 就好,不用改
+- `telegram_bot_token` / `telegram_chat_id`:**選配**,留空(`""`)也能用,只是不會發 Telegram 通知。想開通知的話,照下方[第 2 節](#2-建立-telegram-bot選配)申請
+- `canvas_base_url`:如果不是台大 `cool.ntu.edu.tw`,才需要改
+
+### Step 3. 用 Chrome 登入一次 NTUCOOL
+
+在 Chrome 裡打開 https://cool.ntu.edu.tw 並登入(平常怎麼登入就怎麼登入),讓本機瀏覽器留著一個有效的 session。這一步之後,程式才能讀到有效的 cookie。
+
+### Step 4. Build 前端
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+### Step 5. 啟動,打開網頁面板
+
+```bash
+python3 app.py
+```
+
+打開瀏覽器到 http://localhost:5050,就能看到作業/考試清單、日曆,並手動點:
+- **「重新整理」**:去 Canvas 抓最新資料
+- **「發送 Telegram 通知」**:手動發一次未完成作業清單(沒設定 Telegram 的話這顆按鈕會是灰色,滑鼠移上去會顯示原因)
+
+**這一步就是終點,不一定要往下設定自動排程。** 想每次用都自己跑一次 `python3 app.py`(或用 `nohup python3 -u app.py &` 丟到背景,關掉終端機也不會被砍掉),用完 `Ctrl+C` 關掉即可 —— 純手動使用,系統一樣能正常運作,差別只是沒有自動幫你檢查/推播提醒。
+
+如果想要「每小時自動檢查、快到期自動用 Telegram 推播提醒」,才需要往下看[第 5 節](#5-排程自動執行macos-launchd)設定 macOS `launchd`(僅支援 macOS)。
 
 ## 系統限制
 
