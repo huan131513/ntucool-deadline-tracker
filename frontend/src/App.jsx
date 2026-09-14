@@ -5,9 +5,12 @@ import MiniCalendar from './components/MiniCalendar.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
 import StatusBanner from './components/StatusBanner.jsx'
 import { useDashboard } from './hooks/useDashboard.js'
+import { useSeenTracker } from './hooks/useSeenTracker.js'
 
 export default function App() {
   const { state, message, messageFading, progress, loading, connectionError, refresh, notify } = useDashboard()
+  const assignmentsSeen = useSeenTracker(state?.assignments, 'ntucool_seen_assignments')
+  const examsSeen = useSeenTracker(state?.exams, 'ntucool_seen_exams')
 
   return (
     <div className="wrap">
@@ -38,8 +41,6 @@ export default function App() {
         <div className={`flash ${message.category}${messageFading ? ' fade-out' : ''}`}>{message.text}</div>
       )}
 
-      <CoursesPanel courses={state?.courses} />
-
       <div className="top-grid">
         <div className="top-left">
           <ProgressPanel progress={progress} />
@@ -50,7 +51,10 @@ export default function App() {
 
       {state?.has_data && (
         <>
+          <CoursesPanel courses={state?.courses} />
+
           <DeadlineTable
+            id="assignments-section"
             title="作業"
             itemLabel="作業"
             rows={state.assignments}
@@ -58,8 +62,11 @@ export default function App() {
             showKind={false}
             showCompleted={true}
             ok={state.ok}
+            hasNew={assignmentsSeen.hasNew}
+            onSeen={assignmentsSeen.markSeen}
           />
           <DeadlineTable
+            id="exams-section"
             title="考試"
             itemLabel="考試 / 測驗"
             rows={state.exams}
@@ -67,6 +74,8 @@ export default function App() {
             showKind={true}
             showCompleted={true}
             ok={state.ok}
+            hasNew={examsSeen.hasNew}
+            onSeen={examsSeen.markSeen}
           />
           <AnnouncementHints hints={state.hints} ok={state.ok} />
         </>

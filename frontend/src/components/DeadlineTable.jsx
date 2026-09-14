@@ -4,16 +4,21 @@ const KIND_LABEL = { quiz: '測驗', event: '行事曆', new_quiz: '測驗' }
  * comes back from /api/state for both (see app.py's _urgency_rows).
  * showCompleted adds a 已完成/未完成 column. r.completed is null for rows
  * with no real per-user submission status to report (classic quizzes,
- * calendar events) — those show "—" rather than a guessed 未完成. */
-export default function DeadlineTable({ title, itemLabel, rows, emptyText, showKind, showCompleted, ok }) {
+ * calendar events) — those show "—" rather than a guessed 未完成.
+ *
+ * `id` gives the section a scroll target (the 課程 panel's 作業/考試 pills
+ * jump here). `hasNew`/`onSeen` drive the little red "unseen data" dot —
+ * see useSeenTracker.js for how "new" is decided. */
+export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, showKind, showCompleted, ok, hasNew, onSeen }) {
   return (
-    <>
-      <section className="section-head-wrap">
+    <section id={id} className="deadline-section">
+      <div className="section-head-wrap" onClick={onSeen}>
         <div className="section-head">
           <h2>{title}</h2>
+          {hasNew && <span className="new-dot" title="有新的資料" />}
           <span className="count">{rows?.length ?? 0}</span>
         </div>
-      </section>
+      </div>
 
       {rows && rows.length > 0 ? (
         <div className="table-wrap">
@@ -73,6 +78,6 @@ export default function DeadlineTable({ title, itemLabel, rows, emptyText, showK
       ) : ok ? (
         <div className="empty">{emptyText}</div>
       ) : null}
-    </>
+    </section>
   )
 }
