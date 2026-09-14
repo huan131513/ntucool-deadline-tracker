@@ -3,6 +3,27 @@
 透過 NTUCOOL(Canvas LMS)**官方 API** 抓取所有課程的所有作業截止時間,自動排程檢查,
 並在截止日前用 Telegram Bot 發送提醒。不需要爬蟲、不需要輸入帳號密碼。
 
+## 使用說明(快速上手)
+
+這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面順序設定一次:
+
+1. 準備好 Python 3 環境、裝好套件(`pip install -r requirements.txt`)
+2. 建立自己的 `config.json`(複製 `config.example.json`),填入自己的 Telegram bot token / chat id
+3. 用 Chrome 登入一次 NTUCOOL(讓本機瀏覽器有有效的登入 session)
+4. `npm install && npm run build` build 一次前端
+5. 執行 `python3 app.py`,打開 http://localhost:5050 手動操作,或依照第 5 節設定 macOS `launchd` 排程自動執行
+
+完整步驟見下方第 1~6 節。整個流程大約 10~15 分鐘可以跑起來。
+
+## 系統限制
+
+- **只能在本機執行,無法部署到雲端**(Vercel、Render 等):`"chrome"` 認證模式是直接讀取本機 Chrome 的 cookie 資料庫,雲端環境沒有這份資料,詳見下方[取捨記錄](#為什麼是這個架構認證方式的取捨記錄)方案 5、7
+- **排程自動執行(`launchd`)僅支援 macOS**。Windows/Linux 沒有 `launchd`,若要在其他系統上自動排程,需要自行改用 Windows工作排程器/cron 之類的替代方案,或退回手動打開網頁面板按「重新整理」
+- **必須本機裝有 Chrome、且平常有用它登入 NTUCOOL**,`"chrome"` 認證模式才抓得到有效 cookie；cookie 有效期由 NTUCOOL 伺服器決定,過期後需要重新登入一次 Chrome,程式不會、也不能自動幫你重新登入(不存密碼,見下方安全性備註)
+- **不是「下載即用」**,每個人都要建立自己的 `config.json`(內含各自的 Telegram bot token)並 build 一次前端,`.gitignore` 已排除這些個人設定與資料檔案
+- **考試資訊的準確度有限**:除了 Quizzes / Calendar Events 這種結構化資料,「公告關鍵字掃描」只是低信度的關鍵字比對提示,不保證正確,務必點進原始公告確認
+- **只鎖定 NTUCOOL(台大 Canvas)預設站台**,若要用在其他學校的 Canvas 站台,需自行修改 `canvas_base_url`;若該站台本身有開放個人 Access Token,可改用更單純穩定的 `"token"` 認證模式(見下方)
+
 ## 1. 取得認證方式
 
 **NTUCOOL 不支援 Canvas 原生的個人 Access Token**(參考 [kc0506/ntucool](https://github.com/kc0506/ntucool) 專案的說明),所以設定頁面「功能選項」裡不會有「已核准的整合 / New Access Token」這個區塊,這是正常的,不是你少看到什麼。
