@@ -5,6 +5,8 @@
 
 ## 使用說明(快速上手)
 
+**⚠️ 注意:目前只驗證過 macOS + NTUCOOL(台大 Canvas)。** 排程自動化(`launchd`)僅支援 macOS;其他部分(讀 Chrome cookie、網頁面板)理論上 Windows/Linux 也能跑,但沒有實測過,遇到問題歡迎回報。
+
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面步驟設定一次,全部指令都在專案根目錄下執行。整個流程大約 10~15 分鐘,做完就能用網頁面板手動操作(不裝 Telegram、不設定自動排程也完全沒問題,見下方[系統限制](#系統限制))。
 
 ### Step 0. 前置需求
@@ -12,16 +14,28 @@
 - **Chrome 瀏覽器**,而且平常會用它登入 NTUCOOL(`"chrome"` 認證模式要讀它的 cookie)
 - **Python 3**(`python3 --version` 確認有裝)
 - **Node.js / npm**(build 前端要用,`node -v` 確認有裝)
-- 目前僅在 **macOS** 上驗證過完整流程(排程自動化那部分僅支援 macOS,其他部分理論上 Windows/Linux 也能跑,但沒實測過)
 
 ### Step 1. 下載專案、安裝 Python 套件
 
 ```bash
 git clone https://github.com/huan131513/ntucool-deadline-tracker.git
 cd ntucool-deadline-tracker
+
+# 建立虛擬環境(資料夾 .venv 會在 repo 裡)
 python3 -m venv .venv
+
+# 啟動虛擬環境
 source .venv/bin/activate
+
+# 確認確實指向 repo 內的 python
+which python     # 應該顯示 .../ntucool-deadline-tracker/.venv/bin/python
+
+# 安裝依賴
+pip install --upgrade pip
 pip install -r requirements.txt
+
+# 之後要離開虛擬環境時
+# deactivate
 ```
 
 ### Step 2. 建立自己的設定檔
