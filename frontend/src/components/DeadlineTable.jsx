@@ -2,8 +2,9 @@ const KIND_LABEL = { quiz: '測驗', event: '行事曆', new_quiz: '測驗' }
 
 /** Shared table for both the "作業" and "考試" sections — same row shape
  * comes back from /api/state for both (see app.py's _urgency_rows).
- * showCompleted adds a 已完成/未完成 column — only assignments carry a
- * per-user submission status, so exams never pass this. */
+ * showCompleted adds a 已完成/未完成 column. r.completed is null for rows
+ * with no real per-user submission status to report (classic quizzes,
+ * calendar events) — those show "—" rather than a guessed 未完成. */
 export default function DeadlineTable({ title, itemLabel, rows, emptyText, showKind, showCompleted, ok }) {
   return (
     <>
@@ -55,9 +56,13 @@ export default function DeadlineTable({ title, itemLabel, rows, emptyText, showK
                 </td>
                 {showCompleted && (
                   <td>
-                    <span className={`pill ${r.completed ? 'done' : 'todo'}`}>
-                      {r.completed ? '已完成' : '未完成'}
-                    </span>
+                    {r.completed === null || r.completed === undefined ? (
+                      <span className="pill unknown">—</span>
+                    ) : (
+                      <span className={`pill ${r.completed ? 'done' : 'todo'}`}>
+                        {r.completed ? '已完成' : '未完成'}
+                      </span>
+                    )}
                   </td>
                 )}
               </tr>

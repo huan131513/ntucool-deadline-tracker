@@ -231,6 +231,10 @@ tbody tr.row-link {
   color: var(--ink-faint);
   background: var(--past-soft);
 }
+.pill.unknown {
+  color: var(--ink-faint);
+  background: transparent;
+}
 a.link {
   color: var(--accent);
   text-decoration: none;

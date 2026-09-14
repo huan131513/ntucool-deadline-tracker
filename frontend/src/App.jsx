@@ -54,6 +54,7 @@ export default function App() {
             rows={state.exams}
             emptyText="無資料"
             showKind={true}
+            showCompleted={true}
             ok={state.ok}
           />
           <AnnouncementHints hints={state.hints} ok={state.ok} />

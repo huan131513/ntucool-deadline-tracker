@@ -84,6 +84,10 @@ def do_refresh():
             "due_at": it["due_at"],
             "html_url": it["html_url"],
             "kind": "new_quiz",
+            # New Quizzes come from the Assignments API, so they carry a
+            # real per-user submission status. Classic quizzes/calendar
+            # events (already in `exams`) don't — those stay unset (None).
+            "completed": bool(it.get("has_submitted")),
         }
         for it in quiz_assignments
     ]
@@ -110,6 +114,7 @@ def do_refresh():
                 "due_at": e["due_at"].isoformat() if e["due_at"] else None,
                 "html_url": e["html_url"],
                 "kind": e["kind"],
+                "completed": e.get("completed"),
             }
             for e in all_exams
         ],
