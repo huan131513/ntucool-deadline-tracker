@@ -288,6 +288,23 @@ def fetch_announcement_hints(session, cfg, course_id, course_name):
     return hints
 
 
+def collect_courses(cfg):
+    """Just the course roster (id, name) — so the dashboard can list every
+    active course, including ones with zero upcoming assignments/exams
+    right now. collect_upcoming_assignments/collect_exams below each also
+    fetch courses internally for their own use; this is a small standalone
+    call so callers that only need the roster don't have to pick through
+    those results to reconstruct it."""
+    session = build_session(cfg)
+    progress_step("抓取課程清單", "running")
+    courses = fetch_courses(session, cfg)
+    progress_step("抓取課程清單", "success", f"{len(courses)} 門課程")
+    return [
+        {"id": c["id"], "name": c.get("name") or c.get("course_code") or f"Course {c.get('id')}"}
+        for c in courses
+    ]
+
+
 def collect_exams(cfg):
     """Exams from the two structured Canvas sources: Quizzes and Calendar
     Events. Also runs the announcement keyword scan and returns its (low

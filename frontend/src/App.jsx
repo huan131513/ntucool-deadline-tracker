@@ -1,4 +1,5 @@
 import AnnouncementHints from './components/AnnouncementHints.jsx'
+import CoursesPanel from './components/CoursesPanel.jsx'
 import DeadlineTable from './components/DeadlineTable.jsx'
 import MiniCalendar from './components/MiniCalendar.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
@@ -6,7 +7,7 @@ import StatusBanner from './components/StatusBanner.jsx'
 import { useDashboard } from './hooks/useDashboard.js'
 
 export default function App() {
-  const { state, message, progress, loading, connectionError, refresh, notify } = useDashboard()
+  const { state, message, messageFading, progress, loading, connectionError, refresh, notify } = useDashboard()
 
   return (
     <div className="wrap">
@@ -33,7 +34,11 @@ export default function App() {
       {connectionError && (
         <div className="flash bad">連線失敗,請確認 app.py 還在跑。</div>
       )}
-      {message && <div className={`flash ${message.category}`}>{message.text}</div>}
+      {message && (
+        <div className={`flash ${message.category}${messageFading ? ' fade-out' : ''}`}>{message.text}</div>
+      )}
+
+      <CoursesPanel courses={state?.courses} />
 
       <div className="top-grid">
         <div className="top-left">

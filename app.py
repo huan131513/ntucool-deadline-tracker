@@ -14,6 +14,7 @@ Frontend dev workflow (hot reload instead of rebuilding each time):
 This server itself never needs restarting for frontend-only changes.
 """
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from main import (
     BASE_DIR,
     AuthError,
     ConfigError,
+    collect_courses,
     collect_exams,
     collect_upcoming_assignments,
     get_progress,
@@ -66,6 +68,7 @@ def do_refresh():
         cfg = load_config()
         items, _now = collect_upcoming_assignments(cfg)
         exams, hints = collect_exams(cfg)
+        courses = collect_courses(cfg)
     except (ConfigError, AuthError) as e:
         snapshot = {**prev, "last_refresh": now_str, "ok": False, "error": str(e)}
         save_snapshot(snapshot)
@@ -94,6 +97,27 @@ def do_refresh():
     ]
     all_exams.sort(key=lambda x: x["due_at"] or datetime.max.replace(tzinfo=timezone.utc))
 
+    # Per-course counts of still-upcoming (not past due) items, for the
+    # "課程" overview panel — built from the same items already fetched
+    # above rather than re-deriving anything, and keyed against the full
+    # course roster so a course with zero upcoming items still shows up.
+    now_ref = datetime.now(timezone.utc)
+    assignment_counts, exam_counts = defaultdict(int), defaultdict(int)
+    for it in assignment_items:
+        if it["due_at"] is None or it["due_at"] >= now_ref:
+            assignment_counts[it["course"]] += 1
+    for e in all_exams:
+        if e["due_at"] is None or e["due_at"] >= now_ref:
+            exam_counts[e["course"]] += 1
+    course_summary = [
+        {
+            "name": c["name"],
+            "assignment_count": assignment_counts.get(c["name"], 0),
+            "exam_count": exam_counts.get(c["name"], 0),
+        }
+        for c in courses
+    ]
+
     snapshot = {
         "last_refresh": now_str,
         "ok": True,
@@ -120,6 +144,7 @@ def do_refresh():
             for e in all_exams
         ],
         "hints": hints,
+        "courses": course_summary,
     }
     save_snapshot(snapshot)
     progress_step("整理資料", "success", f"{len(assignment_items)} 筆作業、{len(all_exams)} 筆考試")
@@ -176,7 +201,7 @@ def build_state(snapshot):
     if snapshot is None:
         return {
             "has_data": False, "ok": None, "error": None, "last_refresh": None,
-            "assignments": [], "exams": [], "hints": [],
+            "assignments": [], "exams": [], "hints": [], "courses": [],
         }
 
     last_refresh = snapshot.get("last_refresh")
@@ -201,6 +226,7 @@ def build_state(snapshot):
         "assignments": _urgency_rows(snapshot.get("assignments", [])),
         "exams": _urgency_rows(snapshot.get("exams", [])),
         "hints": hints,
+        "courses": snapshot.get("courses", []),
     }
 
 
