@@ -18,6 +18,8 @@ See README.md for how to get a Canvas access token and a Telegram bot token.
 """
 import argparse
 import json
+import os
+import platform
 import re
 import sys
 import threading
@@ -154,6 +156,29 @@ def canvas_get(session, base_url, path, params=None):
     return results
 
 
+def _chrome_cookie_file_for_profile(profile):
+    """Path to a specific Chrome profile's Cookies db. Only needed when
+    canvas_chrome_profile is set in config.json — without it,
+    browser_cookie3.chrome() only ever reads the "Default" profile (it just
+    takes the first path that exists off its own built-in search list), so
+    if NTUCOOL was logged into e.g. "Profile 12" instead, it silently finds
+    zero cookies there rather than erroring."""
+    system = platform.system()
+    if system == "Darwin":
+        base = Path.home() / "Library" / "Application Support" / "Google" / "Chrome" / profile
+        candidates = [base / "Cookies", base / "Network" / "Cookies"]
+    elif system == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data" / profile
+        candidates = [base / "Network" / "Cookies", base / "Cookies"]
+    else:  # Linux
+        base = Path.home() / ".config" / "google-chrome" / profile
+        candidates = [base / "Cookies"]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return str(candidates[0])  # let browser_cookie3 raise its own "not found" error
+
+
 def build_session(cfg):
     """Build a requests.Session authenticated against Canvas.
 
@@ -162,7 +187,9 @@ def build_session(cfg):
       - "chrome": read the current session cookie straight out of your local
         Chrome's cookie store (no password, no manual copy/paste — just stay
         logged into NTUCOOL in Chrome as usual). Only works when this script
-        runs on your own machine.
+        runs on your own machine. Defaults to Chrome's "Default" profile;
+        set canvas_chrome_profile (e.g. "Profile 12") if NTUCOOL is logged
+        into a different Chrome profile.
       - "cookie": use a session cookie string you copied manually from
         DevTools. Expires (~24h); you refresh it by hand.
       - "token": Canvas's native personal access token, for Canvas instances
@@ -183,8 +210,12 @@ def build_session(cfg):
                 "installed. Run: pip install browser_cookie3"
             )
         domain = cfg.get("canvas_cookie_domain", "cool.ntu.edu.tw")
+        profile = cfg.get("canvas_chrome_profile")  # e.g. "Profile 12"; unset = Chrome's "Default"
+        chrome_kwargs = {"domain_name": domain}
+        if profile:
+            chrome_kwargs["cookie_file"] = _chrome_cookie_file_for_profile(profile)
         try:
-            cj = browser_cookie3.chrome(domain_name=domain)
+            cj = browser_cookie3.chrome(**chrome_kwargs)
         except Exception as e:
             progress_step("檢查登入憑證", "error", f"讀取 Chrome cookie 失敗:{e}")
             raise AuthError(
@@ -196,8 +227,11 @@ def build_session(cfg):
         if not cookie_value:
             progress_step("檢查登入憑證", "error", f"Chrome 裡沒有 {domain} 的 cookie")
             raise AuthError(
-                f"No cookies found for {domain} in Chrome. Log into "
-                f"https://{domain} in Chrome first, then try again."
+                f"No cookies found for {domain} in Chrome"
+                + (f" profile '{profile}'" if profile else "")
+                + f". Log into https://{domain} in Chrome first"
+                + (f" (in that profile)" if profile else "")
+                + ", then try again."
             )
         session.headers.update({"Cookie": cookie_value})
     elif auth_mode == "cookie":

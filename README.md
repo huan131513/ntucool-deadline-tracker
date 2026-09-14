@@ -125,8 +125,45 @@ React 前端 fetch("/api/state") 拿到的是「整理過的作業/考試資料�
 程式直接讀取你本機 Chrome 目前登入 NTUCOOL 的 session cookie,**不用手動複製貼上**。只要你平常有用 Chrome 登入 NTUCOOL,排程執行時就會自動抓到有效 cookie。
 
 - 只能在**這台電腦本機**執行(讀的是本機 Chrome 的資料),沒辦法部署到 Vercel 之類的雲端服務
-- 第一次執行時,macOS 可能會跳出鑰匙圈(Keychain)授權視窗要求解密 Chrome cookie,允許即可(可選「永遠允許」減少之後的提示)
+- 第一次執行時,macOS 可能會跳出鑰匙圈(Keychain)授權視窗要求解密 Chrome cookie,**務必點「永遠允許」**並輸入電腦密碼確認,不要點「拒絕」或只點一次性的「允許」
 - 如果你很長一段時間沒有在 Chrome 裡開過 NTUCOOL、cookie 已失效,程式會報錯提示你重新登入一次
+
+<details>
+<summary>抓不到 cookie,但確定 NTUCOOL 有登入、Chrome 也有 cookie?可能是 Chrome 設定檔(Profile)不對(點開看解法)</summary>
+
+`browser_cookie3` 預設**只讀 Chrome 的 `Default` 這個設定檔**,如果你電腦上開了多個 Chrome Profile(右上角頭像切換的那個),而 NTUCOOL 是登入在別的 Profile(例如 `Profile 12`),`Default` 裡面根本沒有那筆 cookie,程式就會回報「找不到 cookie」——即使 Chrome 裡明明看得到。
+
+**先確認是不是這個原因:**
+
+在你實際登入 NTUCOOL 的那個 Chrome 視窗裡,網址列打開 `chrome://version`,看「設定檔路徑(Profile Path)」結尾:
+- 結尾是 `.../Chrome/Default` → 不是這個問題,要往別的方向查
+- 結尾是 `.../Chrome/Profile 12`(或其他編號)→ 就是這個,往下看怎麼設定
+
+**解法 A(最簡單):換到 Default 這個 Profile 重新登入一次**
+
+用 `chrome://version` 找到哪個視窗才是 `Default`,在那個視窗裡重新登入 https://cool.ntu.edu.tw,之後就抓得到了。
+
+**解法 B:告訴程式讀哪個 Profile**
+
+在 `config.json` 加一行(`canvas_chrome_profile` 填 Profile 的資料夾名稱,不是帳號名稱):
+```json
+"canvas_chrome_profile": "Profile 12"
+```
+存檔後重新整理網頁 / 重跑 `python3 main.py --list` 即可。
+
+**額外小工具:** 不想一個一個開視窗找,可以在終端機跑這段,列出每個 Profile 資料夾對應的帳號名稱:
+```bash
+python3 -c "
+import json, os
+path = os.path.expanduser('~/Library/Application Support/Google/Chrome/Local State')
+with open(path) as f:
+    data = json.load(f)
+for folder, info in data['profile']['info_cache'].items():
+    print(folder, '->', info.get('user_name') or info.get('gaia_name') or info.get('name'))
+"
+```
+
+</details>
 
 ### `"cookie"`(手動備援)
 
