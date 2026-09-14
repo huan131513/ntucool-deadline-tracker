@@ -53,6 +53,10 @@ cp config.example.json config.json
 
 在 Chrome 裡打開 https://cool.ntu.edu.tw 並登入(平常怎麼登入就怎麼登入),讓本機瀏覽器留著一個有效的 session。這一步之後,程式才能讀到有效的 cookie。
 
+順便看一眼你當前google帳號的編號：在網址輸入 `Chrome://version`，找到「設定檔路徑」 例如：	/Users/pengzihuan/Library/Application Support/Google/Chrome/Default
+
+如果最後是profile XX，則到本專案資料夾的config.json設定 "canvas_chrome_profile": "Profile XX"。
+
 ### Step 4. Build 前端
 
 ```bash
