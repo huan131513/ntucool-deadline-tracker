@@ -114,6 +114,7 @@ def do_refresh():
             "name": c["name"],
             "assignment_count": assignment_counts.get(c["name"], 0),
             "exam_count": exam_counts.get(c["name"], 0),
+            "html_url": f"{cfg['canvas_base_url']}/courses/{c['id']}",
         }
         for c in courses
     ]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 // Rows don't carry a stable numeric id from the API, but html_url is a
 // unique Canvas link when present; fall back to a composite key for the
@@ -16,32 +16,34 @@ function loadSeen(storageKey) {
   }
 }
 
-function saveSeen(storageKey, keys) {
+function saveSeen(storageKey, set) {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(keys))
+    localStorage.setItem(storageKey, JSON.stringify([...set]))
   } catch {
     // ignore — worst case the red dot just doesn't persist across reloads
   }
 }
 
-/** Tracks whether any row in `rows` is one the user hasn't "seen" yet
- * (localStorage-backed per browser, not per Canvas account) — drives the
- * red dot on the 作業/考試 section headings. Call markSeen() to clear it,
- * e.g. when the user clicks into that section. */
-export function useSeenTracker(rows, storageKey) {
-  const [hasNew, setHasNew] = useState(false)
+/** Per-row "seen" tracking (localStorage-backed per browser, not per Canvas
+ * account) — each 作業/考試 row gets its own red dot until markSeen(row) is
+ * called for it (e.g. the user clicks that row), rather than one dot for
+ * the whole section. */
+export function useSeenTracker(storageKey) {
+  const [seen, setSeen] = useState(() => loadSeen(storageKey))
 
-  useEffect(() => {
-    if (!rows) return
-    const seen = loadSeen(storageKey)
-    setHasNew(rows.some((r) => !seen.has(rowKey(r))))
-  }, [rows, storageKey])
+  const isNew = useCallback((row) => !seen.has(rowKey(row)), [seen])
 
-  const markSeen = () => {
-    if (!rows) return
-    saveSeen(storageKey, rows.map(rowKey))
-    setHasNew(false)
-  }
+  const markSeen = useCallback(
+    (row) => {
+      const key = rowKey(row)
+      if (seen.has(key)) return
+      const next = new Set(seen)
+      next.add(key)
+      setSeen(next)
+      saveSeen(storageKey, next)
+    },
+    [seen, storageKey]
+  )
 
-  return { hasNew, markSeen }
+  return { isNew, markSeen }
 }

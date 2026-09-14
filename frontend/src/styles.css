@@ -267,10 +267,6 @@ a.link:hover {
 .deadline-section {
   scroll-margin-top: 16px;
 }
-.deadline-section .section-head-wrap {
-  cursor: pointer;
-  display: inline-block;
-}
 .section-head {
   display: flex;
   align-items: baseline;
@@ -287,13 +283,17 @@ a.link:hover {
   font-size: 12px;
   color: var(--ink-faint);
 }
+/* Per-row "unseen" marker (作業/考試 tables) — sits inline right before
+   the item name, so each row gets its own dot instead of one per section. */
 .new-dot {
-  width: 8px;
-  height: 8px;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--crit);
   flex-shrink: 0;
-  align-self: center;
+  margin-right: 6px;
+  vertical-align: middle;
 }
 .kind-tag {
   font-family: 'IBM Plex Mono', monospace;
@@ -437,6 +437,12 @@ a.link:hover {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+}
+.course-card-link {
+  cursor: pointer;
+}
+.course-card-link:hover {
+  background: var(--accent-soft);
 }
 .course-card-name {
   font-size: 13.5px;

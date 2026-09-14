@@ -7,15 +7,15 @@ const KIND_LABEL = { quiz: '測驗', event: '行事曆', new_quiz: '測驗' }
  * calendar events) — those show "—" rather than a guessed 未完成.
  *
  * `id` gives the section a scroll target (the 課程 panel's 作業/考試 pills
- * jump here). `hasNew`/`onSeen` drive the little red "unseen data" dot —
- * see useSeenTracker.js for how "new" is decided. */
-export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, showKind, showCompleted, ok, hasNew, onSeen }) {
+ * jump here). `isNew`/`onRowSeen` drive a red dot per row — each
+ * assignment/exam gets its own, not one for the whole section — see
+ * useSeenTracker.js for how "new" is decided and cleared. */
+export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, showKind, showCompleted, ok, isNew, onRowSeen }) {
   return (
     <section id={id} className="deadline-section">
-      <div className="section-head-wrap" onClick={onSeen}>
+      <div className="section-head-wrap">
         <div className="section-head">
           <h2>{title}</h2>
-          {hasNew && <span className="new-dot" title="有新的資料" />}
           <span className="count">{rows?.length ?? 0}</span>
         </div>
       </div>
@@ -36,9 +36,13 @@ export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, s
               <tr
                 key={i}
                 className={r.html_url ? 'row-link' : ''}
-                onClick={() => r.html_url && window.open(r.html_url, '_blank', 'noopener')}
+                onClick={() => {
+                  onRowSeen?.(r)
+                  if (r.html_url) window.open(r.html_url, '_blank', 'noopener')
+                }}
               >
                 <td>
+                  {isNew?.(r) && <span className="new-dot" title="新資料" />}
                   {showKind && r.kind && <span className="kind-tag">{KIND_LABEL[r.kind] ?? ''}</span>}
                   {r.html_url ? (
                     <a
@@ -46,7 +50,10 @@ export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, s
                       href={r.html_url}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRowSeen?.(r)
+                      }}
                     >
                       {r.name}
                     </a>

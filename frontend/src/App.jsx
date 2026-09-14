@@ -9,8 +9,8 @@ import { useSeenTracker } from './hooks/useSeenTracker.js'
 
 export default function App() {
   const { state, message, messageFading, progress, loading, connectionError, refresh, notify } = useDashboard()
-  const assignmentsSeen = useSeenTracker(state?.assignments, 'ntucool_seen_assignments')
-  const examsSeen = useSeenTracker(state?.exams, 'ntucool_seen_exams')
+  const assignmentsSeen = useSeenTracker('ntucool_seen_assignments')
+  const examsSeen = useSeenTracker('ntucool_seen_exams')
 
   return (
     <div className="wrap">
@@ -62,8 +62,8 @@ export default function App() {
             showKind={false}
             showCompleted={true}
             ok={state.ok}
-            hasNew={assignmentsSeen.hasNew}
-            onSeen={assignmentsSeen.markSeen}
+            isNew={assignmentsSeen.isNew}
+            onRowSeen={assignmentsSeen.markSeen}
           />
           <DeadlineTable
             id="exams-section"
@@ -74,8 +74,8 @@ export default function App() {
             showKind={true}
             showCompleted={true}
             ok={state.ok}
-            hasNew={examsSeen.hasNew}
-            onSeen={examsSeen.markSeen}
+            isNew={examsSeen.isNew}
+            onRowSeen={examsSeen.markSeen}
           />
           <AnnouncementHints hints={state.hints} ok={state.ok} />
         </>
