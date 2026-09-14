@@ -10,10 +10,29 @@
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面順序設定一次:
 
 1. 準備好 Python 3 環境、裝好套件(`pip install -r requirements.txt`)
-2. 建立自己的 `config.json`(複製 `config.example.json`)。Telegram bot token / chat id 是選配,留空也能用網頁面板,只是不會發通知
-3. 用 Chrome 登入一次 NTUCOOL(讓本機瀏覽器有有效的登入 session)
-4. `npm install && npm run build` build 一次前端
-5. 執行 `python3 app.py`,打開 http://localhost:5050 手動操作,或依照第 5 節設定 macOS `launchd` 排程自動執行
+```
+cd /path/to/your-repo
+
+# 建立虛擬環境（資料夾 .venv 會在 repo 裡）
+python3 -m venv .venv
+
+# 啟動
+source .venv/bin/activate
+
+# 確認確實指向 repo 內的 python
+which python     # 應該顯示 .../your-repo/.venv/bin/python
+
+# 安裝依賴
+pip install --upgrade pip
+pip install -r requirements.txt      # 或 pip install -e .
+
+# 結束時
+deactivate
+```
+3. 建立自己的 `config.json`(複製 `config.example.json`)。Telegram bot token / chat id 是選配,留空也能用網頁面板,只是不會發通知
+4. 用 Chrome 登入一次 NTUCOOL(讓本機瀏覽器有有效的登入 session)
+5. cd到前端資料夾，執行`npm install && npm run build` 
+6. 執行 `python3 app.py`,打開 http://localhost:5050 手動操作,或依照第 5 節設定 macOS `launchd` 排程自動執行
 
 完整步驟見下方第 1~6 節。整個流程大約 10~15 分鐘可以跑起來。
 
