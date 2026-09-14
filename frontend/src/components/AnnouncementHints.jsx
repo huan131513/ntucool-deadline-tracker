@@ -6,7 +6,7 @@ export default function AnnouncementHints({ hints, ok }) {
           <h2>公告中可能提到的考試</h2>
           <span className="count">{hints?.length ?? 0}</span>
         </div>
-        <div className="disclaimer">關鍵字比對公告文字,不是結構化資料,請自行點進去確認日期是否正確。</div>
+        <div className="disclaimer">從公布爛抓取關鍵字，不一定正確，請自行點進去確認日期是否正確。</div>
       </section>
 
       {hints && hints.length > 0 ? (

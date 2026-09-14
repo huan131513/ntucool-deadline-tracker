@@ -16,7 +16,7 @@ export default function StatusBanner({ state, loadingInitial }) {
   if (state.ok) {
     return (
       <div className="status">
-        <span className="dot ok" /> Canvas 連線正常
+        <span className="dot ok" /> Canvas 連線正常（請保持NTUCOOL開啟）
       </div>
     )
   }

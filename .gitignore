@@ -8,5 +8,6 @@ launchd.log
 flask.log
 web.log
 .claude/
+.vscode/
 frontend/node_modules/
 frontend/dist/
