@@ -4,7 +4,7 @@
 並在截止日前用 Telegram Bot 發送提醒。不需要爬蟲、不需要輸入帳號密碼。
 
 ## 使用說明(快速上手)
-
+**注意！只能用MacOS+NTUCOOL**
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面順序設定一次:
 
 1. 準備好 Python 3 環境、裝好套件(`pip install -r requirements.txt`)
