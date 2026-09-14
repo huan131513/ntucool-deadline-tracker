@@ -290,6 +290,15 @@ a.link:hover {
 .deadline-section {
   scroll-margin-top: 16px;
 }
+/* DeadlineTable wraps its heading + table-wrap together in one
+   .deadline-section now (for the #assignments-section/#exams-section
+   scroll targets), so they're plain stacked block children with no gap
+   of their own — unlike .section-head-wrap's other uses, which sit inside
+   a flex container that supplies a gap the -10px above is calibrated to
+   shrink. Without this override the heading overlaps the table below it. */
+.deadline-section .section-head-wrap {
+  margin-bottom: 14px;
+}
 .section-head {
   display: flex;
   align-items: baseline;
