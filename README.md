@@ -9,6 +9,35 @@
 
 改用「登入後的 Session Cookie」來認證 —— 一樣是打 Canvas 官方 REST API,只是認證用 cookie 取代 token。**程式完全不會經手、也不會儲存你的帳號密碼**。有三種模式,用 `config.json` 的 `canvas_auth_mode` 切換:
 
+<details>
+<summary>這個 cookie 是誰做的?怎麼運作的?(點開看流程)</summary>
+
+Cookie 是 **NTUCOOL 伺服器**在你用 Chrome 登入的當下製作、發給瀏覽器的,我們的程式從頭到尾沒有參與製作,也不知道你的帳密:
+
+```
+你在 Chrome 登入 ntucool.ntu.edu.tw(帳密驗證)
+    │
+    ▼
+NTUCOOL 伺服器驗證成功 → 產生一組 session cookie → 透過 Set-Cookie 交給瀏覽器
+    │
+    ▼
+Chrome 把這個 cookie 存進本機的 cookie 資料庫
+    │  (以後瀏覽器造訪同網域都會自動附上,伺服器才認得你是誰)
+    ▼
+main.py 用 browser_cookie3 讀出這個現成的 cookie
+    │  塞進 requests.Session,去打 Canvas 官方 API
+    ▼
+main.py 拿到 JSON 資料 → 整理成 dashboard_data.json
+    ▼
+app.py 讀 dashboard_data.json,包成 /api/state 這種乾淨的 JSON 回應
+    ▼
+React 前端 fetch("/api/state") 拿到的是「整理過的作業/考試資料」
+```
+
+**重點:cookie 只在後端 Python 這一層活動,從未流向前端。** 前端(React)和後端(`app.py`)之間走的是完全獨立的本機 API(`/api/state`、`/api/refresh`…),回傳內容只有作業名稱、截止日這類業務資料,不含任何 Canvas 憑證,瀏覽器端也拿不到、看不到那組 cookie。
+
+</details>
+
 ### `"chrome"`(預設,推薦)
 
 程式直接讀取你本機 Chrome 目前登入 NTUCOOL 的 session cookie,**不用手動複製貼上**。只要你平常有用 Chrome 登入 NTUCOOL,排程執行時就會自動抓到有效 cookie。
