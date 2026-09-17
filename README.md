@@ -84,27 +84,53 @@ python3 app.py
 
 ## Windows 版設定步驟(手動模式)
 
-跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。以下用 **PowerShell** 操作(開始功能表搜尋「PowerShell」開啟)。
+跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。
+
+### 這些指令要打在哪裡?(沒用過 Terminal / VSCode 也沒關係)
+
+下面每一段灰色的程式碼區塊,都是要打開一個叫 **PowerShell** 的黑底/藍底視窗,把整段貼進去、按 Enter 執行——不是打在瀏覽器或記事本裡。
+
+**打開 PowerShell 的方法(擇一):**
+
+- 按 **開始鍵**(⊞),直接打字 `powershell`,點第一個結果「Windows PowerShell」
+- 或是等你把專案資料夾準備好之後(見下面 Step 1),打開那個資料夾的 **檔案總管**,點一下最上面的**網址列**(顯示資料夾路徑的那一條),整行反白後直接打 `powershell` 再按 Enter——會開一個「已經在這個資料夾裡」的 PowerShell 視窗,省去自己 `cd` 切換路徑的麻煩,**這個方法最推薦**
+
+**怎麼「貼上」指令:** 在你自己的檔案裡把整段程式碼**複製**起來,回到 PowerShell 視窗,**按右鍵**(不是 `Ctrl+V`,舊版 PowerShell 右鍵才是貼上;新版 Windows Terminal 兩種都可以)就會貼上並自動一行行執行。以 `#` 開頭的是**註解**,說明用的,貼進去也不會出錯,可以不用管它。
+
+**全程只需要一個 PowerShell 視窗**,不用開好幾個,除非某個步驟特別註明「另開一個視窗」。
 
 ### Step 0. 前置需求
 
 - **Chrome 瀏覽器**,平常會用它登入 NTUCOOL
-- **Python 3**(`python --version` 確認有裝;沒裝的話去 [python.org](https://www.python.org/downloads/) 下載,安裝時記得勾選「Add python.exe to PATH」)
-- **Node.js / npm**(build 前端要用,`node -v` 確認有裝)
+- **Python 3**:去 [python.org/downloads](https://www.python.org/downloads/) 下載安裝檔,雙擊執行安裝時,**畫面最下面務必勾選「Add python.exe to PATH」**(這是最容易漏掉、之後所有指令都會失敗的一步),裝完打開 PowerShell 打 `python --version` 應該會印出版本號
+- **Node.js**:去 [nodejs.org](https://nodejs.org/)下載安裝檔(選 LTS 版本),裝完打開 PowerShell 打 `node -v` 確認有版本號
+- **(可選)Git**:如果你不想裝這個,可以跳過,改用下面 Step 1 的「不用 Git」版本
 
 ### Step 1. 下載專案、安裝 Python 套件
 
+**如果沒裝 Git(推薦給不熟悉這些工具的人):**
+1. 瀏覽器打開 https://github.com/huan131513/ntucool-deadline-tracker
+2. 點右上角綠色的 **Code** 按鈕 → **Download ZIP**
+3. 到「下載」資料夾把這個 zip **右鍵 → 全部解壓縮**,解壓縮後會有一個 `ntucool-deadline-tracker-master` 資料夾,建議把它移到比較好找的地方(例如桌面)
+4. 打開這個資料夾,照上面「打開 PowerShell 的方法」第二種,在網址列打 `powershell` 開啟 PowerShell(這樣就已經站在這個資料夾裡了,不用 `cd`)
+
+**如果有裝 Git:**
 ```powershell
 git clone https://github.com/huan131513/ntucool-deadline-tracker.git
 cd ntucool-deadline-tracker
+```
 
+**兩種方式都完成後,在同一個 PowerShell 視窗繼續貼這段:**
+
+```powershell
 # 建立虛擬環境(資料夾 .venv 會在 repo 裡)
 python -m venv .venv
 
 # 啟動虛擬環境
 .venv\Scripts\Activate.ps1
 
-# 如果上面那行說「不允許執行指令碼」,先跑這行放行(只影響目前這個 PowerShell 視窗):
+# 如果上面那行說「不允許執行指令碼」,先跑這行放行(只影響目前這個 PowerShell 視窗),
+# 再重跑一次上面那行 .venv\Scripts\Activate.ps1:
 # Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 # 安裝依賴
@@ -115,16 +141,20 @@ pip install -r requirements.txt
 # deactivate
 ```
 
+執行成功的話,PowerShell 提示字元前面會多一個 `(.venv)` 字樣,代表虛擬環境已經啟動。
+
 ### Step 2. 建立自己的設定檔
 
 ```powershell
 copy config.example.json config.json
 ```
 
-用記事本或任何編輯器打開 `config.json`:
-- `canvas_auth_mode` 保持 `"chrome"` 就好
+回到 **檔案總管**,打開專案資料夾,找到剛剛產生的 `config.json`,**右鍵 → 開啟檔案 → 記事本**(如果選單有「編輯」也可以直接點,一樣是記事本):
+- `canvas_auth_mode` 保持 `"chrome"` 就好,不用改
 - `telegram_bot_token` / `telegram_chat_id`:選配,留空也能用,詳見上方[第 2 節](#2-建立-telegram-bot選配)
 - `canvas_base_url`:不是台大才需要改
+
+改完記得 **Ctrl+S 存檔**,再關掉記事本。
 
 ### Step 3. 用 Chrome 登入一次 NTUCOOL
 
@@ -145,7 +175,11 @@ cd ..
 python app.py
 ```
 
-打開瀏覽器到 http://localhost:5050,用法跟 macOS 版一樣。要停掉就在 PowerShell 視窗按 `Ctrl+C`。
+跑了之後**這個 PowerShell 視窗不會動、也不會跳新畫面出來,看起來像卡住,這是正常的**——它正在背景常駐執行,**不要關掉這個視窗**,只要它開著,網站就能用。
+
+打開瀏覽器,網址列輸入 `http://localhost:5050`,就會看到網頁面板,用法跟 macOS 版一樣(重新整理 / 發送 Telegram 通知)。
+
+不想用了的話,回到那個 PowerShell 視窗按 `Ctrl+C` 停掉,或直接把視窗關掉即可。下次要用,重新打開 PowerShell(記得先 `.venv\Scripts\Activate.ps1` 啟動虛擬環境)再跑一次 `python app.py` 就好,不用重新走一遍前面所有步驟。
 
 <details>
 <summary>Windows 上 Chrome cookie 讀不到、跳「需要系統管理員權限」?(點開看已知問題)</summary>
