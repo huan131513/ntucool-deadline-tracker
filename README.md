@@ -139,11 +139,11 @@ cd ntucool-deadline-tracker
 # 建立虛擬環境(資料夾 .venv 會在 repo 裡)
 python -m venv .venv
 
-# 啟動虛擬環境
-.venv\Scripts\Activate.ps1
+# 啟動虛擬環境(開頭的 .\ 不能省略,不然 PowerShell 會誤判成要載入一個叫 .venv 的模組)
+.\.venv\Scripts\Activate.ps1
 
 # 如果上面那行說「不允許執行指令碼」,先跑這行放行(只影響目前這個 PowerShell 視窗),
-# 再重跑一次上面那行 .venv\Scripts\Activate.ps1:
+# 再重跑一次上面那行 .\.venv\Scripts\Activate.ps1:
 # Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 # 安裝依賴
@@ -192,7 +192,7 @@ python app.py
 
 打開瀏覽器,網址列輸入 `http://localhost:5050`,就會看到網頁面板,用法跟 macOS 版一樣(重新整理 / 發送 Telegram 通知)。
 
-不想用了的話,回到那個 PowerShell 視窗按 `Ctrl+C` 停掉,或直接把視窗關掉即可。下次要用,重新打開 PowerShell(記得先 `.venv\Scripts\Activate.ps1` 啟動虛擬環境)再跑一次 `python app.py` 就好,不用重新走一遍前面所有步驟。
+不想用了的話,回到那個 PowerShell 視窗按 `Ctrl+C` 停掉,或直接把視窗關掉即可。下次要用,重新打開 PowerShell(記得先 `.\.venv\Scripts\Activate.ps1` 啟動虛擬環境)再跑一次 `python app.py` 就好,不用重新走一遍前面所有步驟。
 
 <details>
 <summary>Windows 上 Chrome cookie 讀不到、跳「需要系統管理員權限」?(點開看已知問題)</summary>
