@@ -119,19 +119,12 @@ git --version
 
 ### Step 1. 下載專案、安裝 Python 套件
 
-**如果沒裝 Git(推薦給不熟悉這些工具的人):**
-1. 瀏覽器打開 https://github.com/huan131513/ntucool-deadline-tracker
-2. 點右上角綠色的 **Code** 按鈕 → **Download ZIP**
-3. 到「下載」資料夾把這個 zip **右鍵 → 全部解壓縮**,解壓縮後會有一個 `ntucool-deadline-tracker-master` 資料夾,建議把它移到比較好找的地方(例如桌面)
-4. 打開這個資料夾,照上面「打開 PowerShell 的方法」第二種,在網址列打 `powershell` 開啟 PowerShell(這樣就已經站在這個資料夾裡了,不用 `cd`)
-
-**如果有裝 Git:**
 ```powershell
 git clone https://github.com/huan131513/ntucool-deadline-tracker.git
 cd ntucool-deadline-tracker
 ```
 
-**兩種方式都完成後,在同一個 PowerShell 視窗繼續貼這段:**
+**在同一個 PowerShell 視窗繼續貼這段:**
 
 ```powershell
 # 建立虛擬環境(資料夾 .venv 會在 repo 裡)
