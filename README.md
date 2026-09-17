@@ -5,9 +5,11 @@
 
 ## 使用說明(快速上手)
 
-**⚠️ 注意:目前只驗證過 macOS + NTUCOOL(台大 Canvas)。
+**⚠️ 注意:核心功能(讀 Chrome cookie、抓 Canvas 資料、網頁面板)macOS / Windows 都能跑,但只有 macOS 有完整實測過的自動排程(`launchd`)。Windows 目前只支援下面的「手動模式」,還沒有對應的自動排程步驟,詳見下方 [Windows 版設定步驟](#windows-版設定步驟手動模式)。**
 
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面步驟設定一次,全部指令都在專案根目錄下執行。整個流程大約 10~15 分鐘,做完就能用網頁面板手動操作(不裝 Telegram、不設定自動排程也完全沒問題,見下方[系統限制](#系統限制))。
+
+下面是 **macOS** 版步驟;用 **Windows** 的話直接跳到 [Windows 版設定步驟](#windows-版設定步驟手動模式)。
 
 ### Step 0. 前置需求
 
@@ -79,6 +81,91 @@ python3 app.py
 **這一步就是終點,不一定要往下設定自動排程。** 想每次用都自己跑一次 `python3 app.py`(或用 `nohup python3 -u app.py &` 丟到背景,關掉終端機也不會被砍掉),用完 `Ctrl+C` 關掉即可 —— 純手動使用,系統一樣能正常運作,差別只是沒有自動幫你檢查/推播提醒。
 
 如果想要「每小時自動檢查、快到期自動用 Telegram 推播提醒」,才需要往下看[第 5 節](#5-排程自動執行macos-launchd)設定 macOS `launchd`(僅支援 macOS)。
+
+## Windows 版設定步驟(手動模式)
+
+跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。以下用 **PowerShell** 操作(開始功能表搜尋「PowerShell」開啟)。
+
+### Step 0. 前置需求
+
+- **Chrome 瀏覽器**,平常會用它登入 NTUCOOL
+- **Python 3**(`python --version` 確認有裝;沒裝的話去 [python.org](https://www.python.org/downloads/) 下載,安裝時記得勾選「Add python.exe to PATH」)
+- **Node.js / npm**(build 前端要用,`node -v` 確認有裝)
+
+### Step 1. 下載專案、安裝 Python 套件
+
+```powershell
+git clone https://github.com/huan131513/ntucool-deadline-tracker.git
+cd ntucool-deadline-tracker
+
+# 建立虛擬環境(資料夾 .venv 會在 repo 裡)
+python -m venv .venv
+
+# 啟動虛擬環境
+.venv\Scripts\Activate.ps1
+
+# 如果上面那行說「不允許執行指令碼」,先跑這行放行(只影響目前這個 PowerShell 視窗):
+# Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# 安裝依賴
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 之後要離開虛擬環境時
+# deactivate
+```
+
+### Step 2. 建立自己的設定檔
+
+```powershell
+copy config.example.json config.json
+```
+
+用記事本或任何編輯器打開 `config.json`:
+- `canvas_auth_mode` 保持 `"chrome"` 就好
+- `telegram_bot_token` / `telegram_chat_id`:選配,留空也能用,詳見上方[第 2 節](#2-建立-telegram-bot選配)
+- `canvas_base_url`:不是台大才需要改
+
+### Step 3. 用 Chrome 登入一次 NTUCOOL
+
+在 Chrome 打開 https://cool.ntu.edu.tw 並登入。如果之後抓不到 cookie,先看下方[「抓不到 cookie」那個可展開區塊](#chrome預設推薦)排查是不是 Chrome Profile 不對(`chrome://version` 那個方法,Windows/macOS 通用)。
+
+### Step 4. Build 前端
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+### Step 5. 啟動,打開網頁面板
+
+```powershell
+python app.py
+```
+
+打開瀏覽器到 http://localhost:5050,用法跟 macOS 版一樣。要停掉就在 PowerShell 視窗按 `Ctrl+C`。
+
+<details>
+<summary>Windows 上 Chrome cookie 讀不到、跳「需要系統管理員權限」?(點開看已知問題)</summary>
+
+較新版 Chrome(約 2024 年中之後)在 Windows 上加了一層叫 **App-Bound Encryption** 的保護機制,cookie 的解密金鑰綁定到 Chrome 自己的系統服務,舊版 `browser_cookie3` 可能因此讀取失敗,錯誤訊息類似:
+```
+This operation requires admin. Please run as admin.
+```
+
+**先試這個(最可能解決):**
+```powershell
+pip install --upgrade browser_cookie3
+```
+升級後新版套件通常能正確處理這個機制,不需要真的用系統管理員權限執行。
+
+**如果升級沒用:**
+1. 完全關閉 Chrome(工作管理員裡確認沒有殘留的 `chrome.exe` 行程)再重跑一次
+2. 改用 `"cookie"` 手動模式(見上方[說明](#cookie手動備援)),繞開這個相容性問題,代價是 cookie 每天要手動複製貼上一次
+
+</details>
 
 ## 系統限制
 
