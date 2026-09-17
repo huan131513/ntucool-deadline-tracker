@@ -86,7 +86,7 @@ python3 app.py
 
 跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。
 
-### 這些指令要打在哪裡?(沒用過 Terminal / VSCode 也沒關係)
+### 這些指令要打在哪裡?
 
 下面每一段灰色的程式碼區塊,都是要打開一個叫 **PowerShell** 的黑底/藍底視窗,把整段貼進去、按 Enter 執行——不是打在瀏覽器或記事本裡。
 
@@ -116,8 +116,6 @@ node -v
 git --version
 ```
 三行都要印出版本號,沒有印出來或出現「不是內部或外部命令」,代表對應那套件沒裝成功,重跑一次上面的 `winget install` 那一行。
-
-> 沒有 `winget` 指令(通常是很舊的 Windows 版本)?改成手動下載安裝:[python.org/downloads](https://www.python.org/downloads/)(安裝時**務必勾選「Add python.exe to PATH」**)、[nodejs.org](https://nodejs.org/)(選 LTS 版本)。Git 也可以跳過不裝,改用下面 Step 1 的「不用 Git」版本。
 
 ### Step 1. 下載專案、安裝 Python 套件
 
