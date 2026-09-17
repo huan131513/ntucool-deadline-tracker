@@ -86,18 +86,13 @@ python3 app.py
 
 跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。
 
-### 這些指令要打在哪裡?(沒用過 Terminal / VSCode 也沒關係)
+### 這些指令要打在哪裡?
 
 下面每一段灰色的程式碼區塊,都是要打開一個叫 **PowerShell** 的黑底/藍底視窗,把整段貼進去、按 Enter 執行——不是打在瀏覽器或記事本裡。
 
 **打開 PowerShell 的方法(擇一):**
 
 - 按 **開始鍵**(⊞),直接打字 `powershell`,點第一個結果「Windows PowerShell」
-- 或是等你把專案資料夾準備好之後(見下面 Step 1),打開那個資料夾的 **檔案總管**,點一下最上面的**網址列**(顯示資料夾路徑的那一條),整行反白後直接打 `powershell` 再按 Enter——會開一個「已經在這個資料夾裡」的 PowerShell 視窗,省去自己 `cd` 切換路徑的麻煩,**這個方法最推薦**
-
-**怎麼「貼上」指令:** 在你自己的檔案裡把整段程式碼**複製**起來,回到 PowerShell 視窗,**按右鍵**(不是 `Ctrl+V`,舊版 PowerShell 右鍵才是貼上;新版 Windows Terminal 兩種都可以)就會貼上並自動一行行執行。以 `#` 開頭的是**註解**,說明用的,貼進去也不會出錯,可以不用管它。
-
-**全程只需要一個 PowerShell 視窗**,不用開好幾個,除非某個步驟特別註明「另開一個視窗」。
 
 ### Step 0. 前置需求
 
@@ -117,23 +112,14 @@ git --version
 ```
 三行都要印出版本號,沒有印出來或出現「不是內部或外部命令」,代表對應那套件沒裝成功,重跑一次上面的 `winget install` 那一行。
 
-> 沒有 `winget` 指令(通常是很舊的 Windows 版本)?改成手動下載安裝:[python.org/downloads](https://www.python.org/downloads/)(安裝時**務必勾選「Add python.exe to PATH」**)、[nodejs.org](https://nodejs.org/)(選 LTS 版本)。Git 也可以跳過不裝,改用下面 Step 1 的「不用 Git」版本。
-
 ### Step 1. 下載專案、安裝 Python 套件
 
-**如果沒裝 Git(推薦給不熟悉這些工具的人):**
-1. 瀏覽器打開 https://github.com/huan131513/ntucool-deadline-tracker
-2. 點右上角綠色的 **Code** 按鈕 → **Download ZIP**
-3. 到「下載」資料夾把這個 zip **右鍵 → 全部解壓縮**,解壓縮後會有一個 `ntucool-deadline-tracker-master` 資料夾,建議把它移到比較好找的地方(例如桌面)
-4. 打開這個資料夾,照上面「打開 PowerShell 的方法」第二種,在網址列打 `powershell` 開啟 PowerShell(這樣就已經站在這個資料夾裡了,不用 `cd`)
-
-**如果有裝 Git:**
 ```powershell
 git clone https://github.com/huan131513/ntucool-deadline-tracker.git
 cd ntucool-deadline-tracker
 ```
 
-**兩種方式都完成後,在同一個 PowerShell 視窗繼續貼這段:**
+**在同一個 PowerShell 視窗繼續貼這段:**
 
 ```powershell
 # 建立虛擬環境(資料夾 .venv 會在 repo 裡)
