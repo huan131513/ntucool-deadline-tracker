@@ -101,10 +101,23 @@ python3 app.py
 
 ### Step 0. 前置需求
 
-- **Chrome 瀏覽器**,平常會用它登入 NTUCOOL
-- **Python 3**:去 [python.org/downloads](https://www.python.org/downloads/) 下載安裝檔,雙擊執行安裝時,**畫面最下面務必勾選「Add python.exe to PATH」**(這是最容易漏掉、之後所有指令都會失敗的一步),裝完打開 PowerShell 打 `python --version` 應該會印出版本號
-- **Node.js**:去 [nodejs.org](https://nodejs.org/)下載安裝檔(選 LTS 版本),裝完打開 PowerShell 打 `node -v` 確認有版本號
-- **(可選)Git**:如果你不想裝這個,可以跳過,改用下面 Step 1 的「不用 Git」版本
+需要 **Chrome 瀏覽器**(平常用它登入 NTUCOOL,這個要自己去官網裝)、**Python 3**、**Node.js**、**Git**(可選)。後面三個 Windows 10/11 都可以直接用內建的 `winget` 指令安裝,不用自己上網找安裝檔、按下一步:
+
+打開 PowerShell(見上面說明),整段貼上執行:
+```powershell
+winget install --id Python.Python.3.12 -e
+winget install --id OpenJS.NodeJS.LTS -e
+winget install --id Git.Git -e
+```
+每個套件安裝時都會跳出確認視窗,點**允許/是**即可。全部裝完後,**關掉這個 PowerShell 視窗、重新開一個新的**(這樣新裝的指令才會被系統認得到),貼上這段確認都裝好了:
+```powershell
+python --version
+node -v
+git --version
+```
+三行都要印出版本號,沒有印出來或出現「不是內部或外部命令」,代表對應那套件沒裝成功,重跑一次上面的 `winget install` 那一行。
+
+> 沒有 `winget` 指令(通常是很舊的 Windows 版本)?改成手動下載安裝:[python.org/downloads](https://www.python.org/downloads/)(安裝時**務必勾選「Add python.exe to PATH」**)、[nodejs.org](https://nodejs.org/)(選 LTS 版本)。Git 也可以跳過不裝,改用下面 Step 1 的「不用 Git」版本。
 
 ### Step 1. 下載專案、安裝 Python 套件
 
