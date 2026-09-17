@@ -114,6 +114,11 @@ git --version
 
 ### Step 1. 下載專案、安裝 Python 套件
 
+> ⚠️ **先切到桌面或文件資料夾,不要留在原本開啟的位置**——用開始鍵搜尋打開的 PowerShell,預設會停在 `C:\Windows\System32`,這是系統保護資料夾,在裡面 `git clone`/建立虛擬環境常常會「看起來沒報錯,但其實什麼都沒建立成功」。貼這行先切過去:
+> ```powershell
+> cd $HOME\Desktop
+> ```
+
 ```powershell
 git clone https://github.com/huan131513/ntucool-deadline-tracker.git
 cd ntucool-deadline-tracker
