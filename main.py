@@ -330,59 +330,117 @@ def fetch_announcement_hints(session, cfg, course_id, course_name):
     return hints
 
 
-def fetch_home_page_text(session, cfg, course_id):
-    """Best-effort text of whatever the course's Home tab actually shows —
-    either a wiki front page or, if the course is set to the Syllabus view,
-    the syllabus body. Returns (text, html_url, updated_at); all None if
-    neither is available (e.g. Home is set to Modules/Assignments, which
-    aren't free-text pages to scan)."""
+def fetch_wiki_home_hints(session, cfg, course_id, course_name):
+    """Home tab set to a wiki front page — scan its body text as one blob,
+    same as before. Returns at most one hint."""
     try:
         page = canvas_get(session, cfg["canvas_base_url"], f"/api/v1/courses/{course_id}/front_page")
-        if isinstance(page, dict) and page.get("body"):
-            return _strip_html(page["body"]), page.get("html_url"), page.get("updated_at")
     except requests.HTTPError:
-        pass  # no front page configured — fall through to the syllabus
-
-    try:
-        course = canvas_get(
-            session,
-            cfg["canvas_base_url"],
-            f"/api/v1/courses/{course_id}",
-            {"include[]": "syllabus_body"},
-        )
-        body = course.get("syllabus_body") if isinstance(course, dict) else None
-        if body:
-            html_url = f"{cfg['canvas_base_url']}/courses/{course_id}/assignments/syllabus"
-            return _strip_html(body), html_url, None
-    except requests.HTTPError:
-        pass
-
-    return None, None, None
-
-
-def fetch_home_assignment_hints(session, cfg, course_id, course_name):
-    """Best-effort keyword scan over the course's Home page (front page or
-    syllabus) for mentions of "作業"/"Assignment" that AREN'T a real Canvas
-    Assignment — some instructors just write "Assignment 1: ..." on the
-    front page instead of creating one, so it never shows up in
-    fetch_assignments. Same caveat as fetch_announcement_hints: a match
-    means "go read this yourself", not a confirmed due date."""
-    text, html_url, updated_at = fetch_home_page_text(session, cfg, course_id)
-    if not text:
         return []
-    lowered = text.lower()
-    matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in lowered), None)
+    if not isinstance(page, dict) or not page.get("body"):
+        return []
+    text = _strip_html(page["body"]).lower()
+    matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in text), None)
     if not matched:
         return []
     return [
         {
             "course": course_name,
             "title": "課程首頁",
-            "posted_at": updated_at,
-            "html_url": html_url,
+            "posted_at": page.get("updated_at"),
+            "html_url": page.get("html_url"),
             "matched_keyword": matched,
         }
     ]
+
+
+def fetch_syllabus_home_hints(session, cfg, course_id, course_name):
+    """Home tab set to Syllabus — scan the syllabus body. Returns at most
+    one hint."""
+    try:
+        course = canvas_get(
+            session, cfg["canvas_base_url"], f"/api/v1/courses/{course_id}", {"include[]": "syllabus_body"}
+        )
+    except requests.HTTPError:
+        return []
+    body = course.get("syllabus_body") if isinstance(course, dict) else None
+    if not body:
+        return []
+    text = _strip_html(body).lower()
+    matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in text), None)
+    if not matched:
+        return []
+    return [
+        {
+            "course": course_name,
+            "title": "課程大綱",
+            "posted_at": None,
+            "html_url": f"{cfg['canvas_base_url']}/courses/{course_id}/assignments/syllabus",
+            "matched_keyword": matched,
+        }
+    ]
+
+
+def fetch_modules_home_hints(session, cfg, course_id, course_name):
+    """Home tab set to Modules — the common case where a teacher adds an
+    "Assignment 1" heading (a SubHeader module item, not a real Canvas
+    Assignment) with files attached under it, instead of creating a formal
+    assignment. Scans each module item's title; can return multiple hints,
+    one per matching item, each linking straight to that item (falling
+    back to the modules page itself for SubHeader items, which have no
+    html_url of their own)."""
+    try:
+        modules = canvas_get(
+            session,
+            cfg["canvas_base_url"],
+            f"/api/v1/courses/{course_id}/modules",
+            {"include[]": "items", "per_page": 100},
+        )
+    except requests.HTTPError:
+        return []
+
+    modules_url = f"{cfg['canvas_base_url']}/courses/{course_id}/modules"
+    hints = []
+    for m in modules or []:
+        for item in m.get("items", []) or []:
+            # Module items of type Assignment/Quiz are real Canvas objects
+            # already covered by fetch_assignments/fetch_quizzes — only the
+            # free-text ones (SubHeader headings, File/Page/ExternalUrl
+            # attachments) can hide an assignment Canvas doesn't know about.
+            if item.get("type") in ("Assignment", "Quiz"):
+                continue
+            title = item.get("title", "")
+            lowered = title.lower()
+            matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in lowered), None)
+            if matched:
+                hints.append(
+                    {
+                        "course": course_name,
+                        "title": title,
+                        "posted_at": None,
+                        "html_url": item.get("html_url") or modules_url,
+                        "matched_keyword": matched,
+                    }
+                )
+    return hints
+
+
+def fetch_home_assignment_hints(session, cfg, course_id, course_name, default_view):
+    """Best-effort keyword scan over whatever the course's Home tab
+    actually shows — routes to the matching scanner above based on
+    default_view, so e.g. a Modules-home course isn't scanned as if it
+    were a syllabus. "assignments" (already covered by the real
+    Assignments API) and "feed"/unset (no reliable free text) are skipped.
+    Same caveat as fetch_announcement_hints: a match means "go read this
+    yourself", not a confirmed due date — never fed into Telegram
+    reminders."""
+    if default_view == "wiki":
+        return fetch_wiki_home_hints(session, cfg, course_id, course_name)
+    if default_view == "syllabus":
+        return fetch_syllabus_home_hints(session, cfg, course_id, course_name)
+    if default_view == "modules":
+        return fetch_modules_home_hints(session, cfg, course_id, course_name)
+    return []
 
 
 def collect_assignment_hints(cfg):
@@ -410,7 +468,9 @@ def collect_assignment_hints(cfg):
     hints = []
     for course in courses:
         course_name = course.get("name") or course.get("course_code") or f"Course {course['id']}"
-        hints.extend(fetch_home_assignment_hints(session, cfg, course["id"], course_name))
+        hints.extend(
+            fetch_home_assignment_hints(session, cfg, course["id"], course_name, course.get("default_view"))
+        )
     progress_step("掃描課程首頁", "success", f"{len(hints)} 筆命中")
     return hints
 
