@@ -65,6 +65,13 @@ export default function App() {
             isNew={assignmentsSeen.isNew}
             onRowSeen={assignmentsSeen.markSeen}
           />
+          <AnnouncementHints
+            title="課程首頁可能提到的作業"
+            disclaimer="從課程首頁/課程大綱抓取關鍵字，不一定是真的作業，請自行點進去確認。"
+            hints={state.assignment_hints}
+            ok={state.ok}
+          />
+
           <DeadlineTable
             id="exams-section"
             title="考試"
@@ -77,7 +84,12 @@ export default function App() {
             isNew={examsSeen.isNew}
             onRowSeen={examsSeen.markSeen}
           />
-          <AnnouncementHints hints={state.hints} ok={state.ok} />
+          <AnnouncementHints
+            title="公告中可能提到的考試"
+            disclaimer="從公布欄抓取關鍵字，不一定正確，請自行點進去確認日期是否正確。"
+            hints={state.hints}
+            ok={state.ok}
+          />
         </>
       )}
     </div>

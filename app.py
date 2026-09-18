@@ -24,6 +24,7 @@ from main import (
     BASE_DIR,
     AuthError,
     ConfigError,
+    collect_assignment_hints,
     collect_courses,
     collect_exams,
     collect_upcoming_assignments,
@@ -69,6 +70,7 @@ def do_refresh():
         items, _now = collect_upcoming_assignments(cfg)
         exams, hints = collect_exams(cfg)
         courses = collect_courses(cfg)
+        assignment_hints = collect_assignment_hints(cfg)
     except (ConfigError, AuthError) as e:
         snapshot = {**prev, "last_refresh": now_str, "ok": False, "error": str(e)}
         save_snapshot(snapshot)
@@ -145,6 +147,7 @@ def do_refresh():
             for e in all_exams
         ],
         "hints": hints,
+        "assignment_hints": assignment_hints,
         "courses": course_summary,
     }
     save_snapshot(snapshot)
@@ -198,26 +201,29 @@ def _urgency_rows(entries):
     return rows
 
 
-def build_state(snapshot):
-    if snapshot is None:
-        return {
-            "has_data": False, "ok": None, "error": None, "last_refresh": None,
-            "assignments": [], "exams": [], "hints": [], "courses": [],
-        }
-
-    last_refresh = snapshot.get("last_refresh")
-    if last_refresh:
-        last_refresh = datetime.fromisoformat(last_refresh).strftime("%Y-%m-%d %H:%M:%S")
-
-    hints = []
-    for h in snapshot.get("hints", []):
+def _hint_rows(hints):
+    rows = []
+    for h in hints or []:
         posted = h.get("posted_at")
-        hints.append(
+        rows.append(
             {
                 **h,
                 "posted_str": datetime.fromisoformat(posted).astimezone().strftime("%Y-%m-%d") if posted else "—",
             }
         )
+    return rows
+
+
+def build_state(snapshot):
+    if snapshot is None:
+        return {
+            "has_data": False, "ok": None, "error": None, "last_refresh": None,
+            "assignments": [], "exams": [], "hints": [], "assignment_hints": [], "courses": [],
+        }
+
+    last_refresh = snapshot.get("last_refresh")
+    if last_refresh:
+        last_refresh = datetime.fromisoformat(last_refresh).strftime("%Y-%m-%d %H:%M:%S")
 
     return {
         "has_data": True,
@@ -226,7 +232,8 @@ def build_state(snapshot):
         "last_refresh": last_refresh,
         "assignments": _urgency_rows(snapshot.get("assignments", [])),
         "exams": _urgency_rows(snapshot.get("exams", [])),
-        "hints": hints,
+        "hints": _hint_rows(snapshot.get("hints", [])),
+        "assignment_hints": _hint_rows(snapshot.get("assignment_hints", [])),
         "courses": snapshot.get("courses", []),
     }
 

@@ -35,6 +35,14 @@ EXAM_KEYWORDS = [
     "midterm", "final exam", "final", "exam",
 ]
 
+# Same idea as EXAM_KEYWORDS, but for the course Home page — some instructors
+# write "Assignment 1: ..." directly on the front page/syllabus instead of
+# creating a real Canvas Assignment, so it never shows up in fetch_assignments.
+# See fetch_home_assignment_hints.
+ASSIGNMENT_KEYWORDS = [
+    "作業", "assignment", "assignments", "hw", "homework",
+]
+
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 
@@ -319,6 +327,91 @@ def fetch_announcement_hints(session, cfg, course_id, course_name):
                     "matched_keyword": matched,
                 }
             )
+    return hints
+
+
+def fetch_home_page_text(session, cfg, course_id):
+    """Best-effort text of whatever the course's Home tab actually shows —
+    either a wiki front page or, if the course is set to the Syllabus view,
+    the syllabus body. Returns (text, html_url, updated_at); all None if
+    neither is available (e.g. Home is set to Modules/Assignments, which
+    aren't free-text pages to scan)."""
+    try:
+        page = canvas_get(session, cfg["canvas_base_url"], f"/api/v1/courses/{course_id}/front_page")
+        if isinstance(page, dict) and page.get("body"):
+            return _strip_html(page["body"]), page.get("html_url"), page.get("updated_at")
+    except requests.HTTPError:
+        pass  # no front page configured — fall through to the syllabus
+
+    try:
+        course = canvas_get(
+            session,
+            cfg["canvas_base_url"],
+            f"/api/v1/courses/{course_id}",
+            {"include[]": "syllabus_body"},
+        )
+        body = course.get("syllabus_body") if isinstance(course, dict) else None
+        if body:
+            html_url = f"{cfg['canvas_base_url']}/courses/{course_id}/assignments/syllabus"
+            return _strip_html(body), html_url, None
+    except requests.HTTPError:
+        pass
+
+    return None, None, None
+
+
+def fetch_home_assignment_hints(session, cfg, course_id, course_name):
+    """Best-effort keyword scan over the course's Home page (front page or
+    syllabus) for mentions of "作業"/"Assignment" that AREN'T a real Canvas
+    Assignment — some instructors just write "Assignment 1: ..." on the
+    front page instead of creating one, so it never shows up in
+    fetch_assignments. Same caveat as fetch_announcement_hints: a match
+    means "go read this yourself", not a confirmed due date."""
+    text, html_url, updated_at = fetch_home_page_text(session, cfg, course_id)
+    if not text:
+        return []
+    lowered = text.lower()
+    matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in lowered), None)
+    if not matched:
+        return []
+    return [
+        {
+            "course": course_name,
+            "title": "課程首頁",
+            "posted_at": updated_at,
+            "html_url": html_url,
+            "matched_keyword": matched,
+        }
+    ]
+
+
+def collect_assignment_hints(cfg):
+    """Home-page keyword scan across all active courses — see
+    fetch_home_assignment_hints. Standalone call (own build_session +
+    fetch_courses), same pattern as collect_courses, so it doesn't disturb
+    collect_upcoming_assignments/collect_exams's existing return shapes."""
+    session = build_session(cfg)
+
+    progress_step("連接 Canvas 官方 API", "running")
+    try:
+        courses = fetch_courses(session, cfg)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (401, 419):
+            progress_step("連接 Canvas 官方 API", "error", "Cookie 已過期(401/419)")
+            raise AuthError(
+                "Canvas authentication failed (401/419). Your session cookie has "
+                "probably expired — log into cool.ntu.edu.tw again in Chrome."
+            )
+        progress_step("連接 Canvas 官方 API", "error", str(e))
+        raise
+    progress_step("連接 Canvas 官方 API", "success", f"{len(courses)} 門課程")
+
+    progress_step("掃描課程首頁", "running")
+    hints = []
+    for course in courses:
+        course_name = course.get("name") or course.get("course_code") or f"Course {course['id']}"
+        hints.extend(fetch_home_assignment_hints(session, cfg, course["id"], course_name))
+    progress_step("掃描課程首頁", "success", f"{len(hints)} 筆命中")
     return hints
 
 

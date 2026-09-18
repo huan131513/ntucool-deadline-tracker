@@ -1,12 +1,16 @@
-export default function AnnouncementHints({ hints, ok }) {
+/** Generic low-confidence keyword-hit list — used for both "公告中可能提到
+ * 的考試" (announcement exam-keyword scan) and "課程首頁可能提到的作業"
+ * (course Home-page assignment-keyword scan). Same shape either way:
+ * {course, title, posted_at/posted_str, html_url, matched_keyword}. */
+export default function AnnouncementHints({ title, disclaimer, hints, ok }) {
   return (
     <>
       <section className="section-head-wrap">
         <div className="section-head">
-          <h2>公告中可能提到的考試</h2>
+          <h2>{title}</h2>
           <span className="count">{hints?.length ?? 0}</span>
         </div>
-        <div className="disclaimer">從公布爛抓取關鍵字，不一定正確，請自行點進去確認日期是否正確。</div>
+        <div className="disclaimer">{disclaimer}</div>
       </section>
 
       {hints && hints.length > 0 ? (
