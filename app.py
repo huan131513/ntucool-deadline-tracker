@@ -82,6 +82,32 @@ def do_refresh():
     assignment_items = [it for it in items if not it.get("is_quiz")]
     quiz_assignments = [it for it in items if it.get("is_quiz")]
 
+    # A home-page/module hint with a confidently-parsed "Due: ..." PDF date
+    # (see main.py's fetch_pdf_due_date) gets promoted into a real 作業 row
+    # instead of just sitting in the low-confidence hint list — tagged
+    # source="pdf_guess" so the frontend can flag it as guessed, not
+    # official. It's still built here in app.py only (the dashboard layer);
+    # main.py's CLI/Telegram pipeline never sees or trusts it.
+    pdf_guessed_items = []
+    plain_hints = []
+    for h in assignment_hints:
+        guessed = h.get("guessed_due_at")
+        if guessed:
+            pdf_guessed_items.append(
+                {
+                    "course": h["course"],
+                    "name": h["title"],
+                    "due_at": datetime.fromisoformat(guessed),
+                    "html_url": h.get("html_url"),
+                    "source": "pdf_guess",
+                }
+            )
+        else:
+            plain_hints.append(h)
+    assignment_items = assignment_items + [
+        {**it, "is_quiz": False, "has_submitted": None} for it in pdf_guessed_items
+    ]
+
     all_exams = exams + [
         {
             "id": f"newquiz:{it['id']}",
@@ -131,7 +157,11 @@ def do_refresh():
                 "name": it["name"],
                 "due_at": it["due_at"].isoformat() if it["due_at"] else None,
                 "html_url": it["html_url"],
-                "completed": bool(it.get("has_submitted")),
+                # pdf_guess rows have no real submission status to report —
+                # None (not False) so the frontend shows "—", not a
+                # confidently-wrong "未完成".
+                "completed": None if it.get("source") == "pdf_guess" else bool(it.get("has_submitted")),
+                "source": it.get("source"),
             }
             for it in assignment_items
         ],
@@ -147,7 +177,7 @@ def do_refresh():
             for e in all_exams
         ],
         "hints": hints,
-        "assignment_hints": assignment_hints,
+        "assignment_hints": plain_hints,
         "courses": course_summary,
     }
     save_snapshot(snapshot)
@@ -192,6 +222,9 @@ def _urgency_rows(entries):
                 # Only assignment rows carry this (see do_refresh) — exams
                 # don't track a per-user submission state the same way.
                 "completed": e.get("completed"),
+                # "pdf_guess" for a 作業 row promoted from a spec PDF's
+                # "Due: ..." line (see do_refresh) — None for everything else.
+                "source": e.get("source"),
                 "sort_key": days_left,
             }
         )

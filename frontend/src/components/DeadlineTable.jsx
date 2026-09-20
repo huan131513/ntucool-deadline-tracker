@@ -44,6 +44,14 @@ export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, s
                 <td>
                   {isNew?.(r) && <span className="new-dot" title="新資料" />}
                   {showKind && r.kind && <span className="kind-tag">{KIND_LABEL[r.kind] ?? ''}</span>}
+                  {r.source === 'pdf_guess' && (
+                    <span
+                      className="kind-tag guess"
+                      title="截止日期是從課程首頁附的 PDF 裡自動判讀的，不是 Canvas 正式登記的資料，可能不準，請自行點進去確認"
+                    >
+                      PDF 推測
+                    </span>
+                  )}
                   {r.html_url ? (
                     <a
                       className="link"

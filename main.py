@@ -381,6 +381,86 @@ def fetch_syllabus_home_hints(session, cfg, course_id, course_name):
     ]
 
 
+TAIPEI_TZ = timezone(timedelta(hours=8))
+
+# "Due: Thu, 2026/10/1 23:59" / "Due 2026-10-01 23:59" / "截止：2026/10/1 23:59"
+# — the handful of due-date phrasings actually seen in spec PDFs so far.
+# Deliberately narrow: a wrong guess here would show a fabricated deadline
+# right in the 作業 table, so we'd rather miss a due date than mis-parse one.
+_DUE_DATE_PATTERNS = [
+    re.compile(
+        r"(?:due|截止)\s*[:：]?\s*(?:\w+,?\s*)?"
+        r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})"
+        r"(?:[ ,]+(\d{1,2}):(\d{2}))?",
+        re.IGNORECASE,
+    ),
+]
+
+
+def guess_due_date_from_text(text):
+    """Best-effort "Due: ..." line parse — see _DUE_DATE_PATTERNS. Returns
+    an aware UTC datetime, or None if nothing matched. Assumes Taipei time
+    (NTU's own timezone) when a date is found, since none of these PDFs
+    state a timezone explicitly."""
+    for pattern in _DUE_DATE_PATTERNS:
+        m = pattern.search(text)
+        if not m:
+            continue
+        year, month, day, hour, minute = m.groups()
+        try:
+            local = datetime(
+                int(year), int(month), int(day),
+                int(hour) if hour else 23, int(minute) if minute else 59,
+                tzinfo=TAIPEI_TZ,
+            )
+        except ValueError:
+            continue  # e.g. month 13 — a bad match, not a bad date
+        return local.astimezone(timezone.utc)
+    return None
+
+
+def fetch_pdf_due_date(session, cfg, module_item):
+    """Download a File-type module item (if it's actually a PDF, under a
+    size cap) and try to guess a due date from its text — see
+    guess_due_date_from_text. Returns None on anything not confidently a
+    PDF spec with a parseable "Due:" line; never raises."""
+    content_id = module_item.get("content_id")
+    api_url = module_item.get("url")
+    if not content_id or not api_url:
+        return None
+    try:
+        file_meta = canvas_get(session, cfg["canvas_base_url"], api_url.split(cfg["canvas_base_url"], 1)[-1])
+    except requests.HTTPError:
+        return None
+    if not isinstance(file_meta, dict) or file_meta.get("content-type") != "application/pdf":
+        return None
+    if (file_meta.get("size") or 0) > 20 * 1024 * 1024:  # 20 MB — spec PDFs are tiny; skip anything huge
+        return None
+    download_url = file_meta.get("url")
+    if not download_url:
+        return None
+
+    try:
+        resp = session.get(download_url, timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+
+    try:
+        from pypdf import PdfReader
+        import io
+
+        reader = PdfReader(io.BytesIO(resp.content))
+        # The due date is always stated up front in every spec we've seen —
+        # capping at 3 pages keeps this fast and avoids false hits deep in
+        # an appendix (e.g. a referenced paper's own publication date).
+        text = "\n".join((p.extract_text() or "") for p in reader.pages[:3])
+    except Exception:
+        return None  # a corrupt/encrypted/scanned-image PDF — nothing we can read
+
+    return guess_due_date_from_text(text)
+
+
 def fetch_modules_home_hints(session, cfg, course_id, course_name):
     """Home tab set to Modules — the common case where a teacher adds an
     "Assignment 1" heading (a SubHeader module item, not a real Canvas
@@ -413,15 +493,23 @@ def fetch_modules_home_hints(session, cfg, course_id, course_name):
             lowered = title.lower()
             matched = next((kw for kw in ASSIGNMENT_KEYWORDS if kw.lower() in lowered), None)
             if matched:
-                hints.append(
-                    {
-                        "course": course_name,
-                        "title": title,
-                        "posted_at": None,
-                        "html_url": item.get("html_url") or modules_url,
-                        "matched_keyword": matched,
-                    }
-                )
+                hint = {
+                    "course": course_name,
+                    "title": title,
+                    "posted_at": None,
+                    "html_url": item.get("html_url") or modules_url,
+                    "matched_keyword": matched,
+                }
+                # A matching PDF is the one case worth trying to actually
+                # read — if it states a "Due: ..." line we can parse, this
+                # promotes the hint into a real 作業 row (see app.py); if
+                # not, it just stays a plain low-confidence hint like any
+                # other.
+                if item.get("type") == "File" and title.lower().endswith(".pdf"):
+                    due_at = fetch_pdf_due_date(session, cfg, item)
+                    if due_at:
+                        hint["guessed_due_at"] = due_at.isoformat()
+                hints.append(hint)
     return hints
 
 

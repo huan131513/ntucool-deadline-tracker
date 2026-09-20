@@ -337,6 +337,12 @@ a.link:hover {
   padding: 1px 6px;
   margin-right: 6px;
 }
+/* A due date auto-read off a PDF, not real Canvas data — soon/warning
+   colors so it visually stands apart from a normal kind-tag. */
+.kind-tag.guess {
+  color: var(--soon);
+  background: var(--soon-soft);
+}
 
 .hint-list {
   display: flex;
