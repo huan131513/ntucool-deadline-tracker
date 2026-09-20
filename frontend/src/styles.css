@@ -553,6 +553,32 @@ a.link:hover {
   font-size: 16px;
   color: var(--accent);
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cal-nav {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 8px;
+  box-shadow: none;
+  cursor: pointer;
+}
+.cal-nav:hover {
+  background: var(--accent-soft);
+  filter: none;
+}
+.cal-nav:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+.cal-nav:disabled:hover {
+  background: transparent;
 }
 .cal-weekdays,
 .cal-grid {

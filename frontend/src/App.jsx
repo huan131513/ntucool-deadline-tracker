@@ -48,7 +48,7 @@ export default function App() {
           <ProgressPanel progress={progress} />
           <StatusBanner state={state} loadingInitial={loading.initial} />
         </div>
-        <MiniCalendar assignments={state?.assignments} exams={state?.exams} />
+        <MiniCalendar assignments={state?.assignments} exams={state?.exams} term={state?.term} />
       </div>
 
       {state?.has_data && (

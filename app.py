@@ -27,6 +27,7 @@ from main import (
     collect_assignment_hints,
     collect_courses,
     collect_exams,
+    collect_term_range,
     collect_upcoming_assignments,
     get_progress,
     load_config,
@@ -71,6 +72,7 @@ def do_refresh():
         exams, hints = collect_exams(cfg)
         courses = collect_courses(cfg)
         assignment_hints = collect_assignment_hints(cfg)
+        term_start, term_end = collect_term_range(cfg)
     except (ConfigError, AuthError) as e:
         snapshot = {**prev, "last_refresh": now_str, "ok": False, "error": str(e)}
         save_snapshot(snapshot)
@@ -179,6 +181,10 @@ def do_refresh():
         "hints": hints,
         "assignment_hints": plain_hints,
         "courses": course_summary,
+        "term": {
+            "start": term_start.isoformat() if term_start else None,
+            "end": term_end.isoformat() if term_end else None,
+        },
     }
     save_snapshot(snapshot)
     progress_step("整理資料", "success", f"{len(assignment_items)} 筆作業、{len(all_exams)} 筆考試")
@@ -252,6 +258,7 @@ def build_state(snapshot):
         return {
             "has_data": False, "ok": None, "error": None, "last_refresh": None,
             "assignments": [], "exams": [], "hints": [], "assignment_hints": [], "courses": [],
+            "term": {"start": None, "end": None},
         }
 
     last_refresh = snapshot.get("last_refresh")
@@ -268,6 +275,7 @@ def build_state(snapshot):
         "hints": _hint_rows(snapshot.get("hints", [])),
         "assignment_hints": _hint_rows(snapshot.get("assignment_hints", [])),
         "courses": snapshot.get("courses", []),
+        "term": snapshot.get("term", {"start": None, "end": None}),
     }
 
 

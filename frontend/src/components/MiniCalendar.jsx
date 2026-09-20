@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 // Any given day's dot uses whichever item on it is most urgent — reuses
 // the urgency classes already computed server-side (see app.py's
@@ -41,18 +43,69 @@ function collectByDate(assignments, exams) {
   return { byDate, urgencyByDate }
 }
 
-export default function MiniCalendar({ assignments, exams }) {
+// year*12+month as a single comparable integer, for clamping the
+// prev/next buttons against the semester's start/end month.
+function monthIndex(year, month) {
+  return year * 12 + month
+}
+
+export default function MiniCalendar({ assignments, exams, term }) {
   const today = new Date()
-  const year = today.getFullYear()
-  const month = today.getMonth()
-  const cells = buildMonthGrid(year, month)
+  const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() })
+  const cells = buildMonthGrid(view.year, view.month)
   const { byDate, urgencyByDate } = collectByDate(assignments, exams)
   const todayKey = today.toISOString().slice(0, 10)
+
+  // term comes from NTUCOOL's own course Term dates (see app.py's
+  // collect_term_range) — when present, keeps the arrows from wandering
+  // into a different semester's empty months.
+  const termStart = term?.start ? new Date(term.start) : null
+  const termEnd = term?.end ? new Date(term.end) : null
+  const viewIdx = monthIndex(view.year, view.month)
+  const minIdx = termStart ? monthIndex(termStart.getFullYear(), termStart.getMonth()) : null
+  const maxIdx = termEnd ? monthIndex(termEnd.getFullYear(), termEnd.getMonth()) : null
+  const canGoPrev = minIdx === null || viewIdx > minIdx
+  const canGoNext = maxIdx === null || viewIdx < maxIdx
+
+  function shiftMonth(delta) {
+    setView((v) => {
+      let month = v.month + delta
+      let year = v.year
+      if (month < 0) {
+        month = 11
+        year -= 1
+      } else if (month > 11) {
+        month = 0
+        year += 1
+      }
+      return { year, month }
+    })
+  }
 
   return (
     <div className="mini-cal">
       <div className="cal-header">
-        {year}{'年'}{month + 1}{'月'}
+        <button
+          type="button"
+          className="cal-nav"
+          disabled={!canGoPrev}
+          onClick={() => shiftMonth(-1)}
+          aria-label="上個月"
+        >
+          ‹
+        </button>
+        <span>
+          {view.year}{'年'}{view.month + 1}{'月'}
+        </span>
+        <button
+          type="button"
+          className="cal-nav"
+          disabled={!canGoNext}
+          onClick={() => shiftMonth(1)}
+          aria-label="下個月"
+        >
+          ›
+        </button>
       </div>
       <div className="cal-weekdays">
         {WEEKDAYS.map((w) => (
@@ -64,7 +117,7 @@ export default function MiniCalendar({ assignments, exams }) {
       <div className="cal-grid">
         {cells.map((d, i) => {
           if (d === null) return <div key={i} className="cal-cell" />
-          const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          const dateKey = `${view.year}-${String(view.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
           const urgency = urgencyByDate[dateKey]
           const dayItems = byDate[dateKey]
           return (

@@ -261,7 +261,7 @@ def build_session(cfg):
 
 
 def fetch_courses(session, cfg):
-    params = {"per_page": 100}
+    params = {"per_page": 100, "include[]": "term"}
     if cfg.get("only_active_courses", True):
         params["enrollment_state"] = "active"
     return canvas_get(session, cfg["canvas_base_url"], "/api/v1/courses", params)
@@ -578,6 +578,29 @@ def collect_courses(cfg):
         {"id": c["id"], "name": c.get("name") or c.get("course_code") or f"Course {c.get('id')}"}
         for c in courses
     ]
+
+
+def collect_term_range(cfg):
+    """This semester's date range — the widest span across all active
+    courses' Terms (fetch_courses already requests include[]=term). Used
+    to bound the mini calendar's prev/next month arrows so you can't
+    navigate into a different semester's empty months. Returns
+    (start, end) as aware UTC datetimes, or (None, None) if no course has
+    term info (e.g. NTUCOOL doesn't set one, or you're not enrolled in
+    anything yet)."""
+    session = build_session(cfg)
+    progress_step("抓取課程清單", "running")
+    courses = fetch_courses(session, cfg)
+    progress_step("抓取課程清單", "success", f"{len(courses)} 門課程")
+
+    starts, ends = [], []
+    for c in courses:
+        term = c.get("term") or {}
+        if term.get("start_at"):
+            starts.append(datetime.fromisoformat(term["start_at"].replace("Z", "+00:00")))
+        if term.get("end_at"):
+            ends.append(datetime.fromisoformat(term["end_at"].replace("Z", "+00:00")))
+    return (min(starts) if starts else None), (max(ends) if ends else None)
 
 
 def collect_exams(cfg):
