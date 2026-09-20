@@ -266,6 +266,14 @@ tbody tr.row-link {
   color: var(--ink-faint);
   background: transparent;
 }
+.pill-toggle {
+  cursor: pointer;
+  border: none;
+  box-shadow: none;
+}
+.pill-toggle:hover {
+  filter: brightness(0.95);
+}
 a.link {
   color: var(--accent);
   text-decoration: none;

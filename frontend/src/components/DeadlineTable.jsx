@@ -9,8 +9,24 @@ const KIND_LABEL = { quiz: '測驗', event: '行事曆', new_quiz: '測驗' }
  * `id` gives the section a scroll target (the 課程 panel's 作業/考試 pills
  * jump here). `isNew`/`onRowSeen` drive a red dot per row — each
  * assignment/exam gets its own, not one for the whole section — see
- * useSeenTracker.js for how "new" is decided and cleared. */
-export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, showKind, showCompleted, ok, isNew, onRowSeen }) {
+ * useSeenTracker.js for how "new" is decided and cleared. `isPdfGuessDone`/
+ * `onTogglePdfGuess` back a manual 已完成/未完成 pill for r.source ===
+ * "pdf_guess" rows — those were never a real Canvas Assignment, so there's
+ * no submission status to read (see usePdfGuessStatus.js). */
+export default function DeadlineTable({
+  id,
+  title,
+  itemLabel,
+  rows,
+  emptyText,
+  showKind,
+  showCompleted,
+  ok,
+  isNew,
+  onRowSeen,
+  isPdfGuessDone,
+  onTogglePdfGuess,
+}) {
   return (
     <section id={id} className="deadline-section">
       <div className="section-head-wrap">
@@ -76,7 +92,19 @@ export default function DeadlineTable({ id, title, itemLabel, rows, emptyText, s
                 </td>
                 {showCompleted && (
                   <td>
-                    {r.completed === null || r.completed === undefined ? (
+                    {r.source === 'pdf_guess' ? (
+                      <button
+                        type="button"
+                        className={`pill pill-toggle ${isPdfGuessDone?.(r) ? 'done' : 'todo'}`}
+                        title="沒有正式的 Canvas 作業可以查完成狀態，自己點一下記錄"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onTogglePdfGuess?.(r)
+                        }}
+                      >
+                        {isPdfGuessDone?.(r) ? '已完成' : '未完成'}
+                      </button>
+                    ) : r.completed === null || r.completed === undefined ? (
                       <span className="pill unknown">—</span>
                     ) : (
                       <span className={`pill ${r.completed ? 'done' : 'todo'}`}>

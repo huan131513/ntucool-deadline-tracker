@@ -5,12 +5,14 @@ import MiniCalendar from './components/MiniCalendar.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
 import StatusBanner from './components/StatusBanner.jsx'
 import { useDashboard } from './hooks/useDashboard.js'
+import { usePdfGuessStatus } from './hooks/usePdfGuessStatus.js'
 import { useSeenTracker } from './hooks/useSeenTracker.js'
 
 export default function App() {
   const { state, message, messageFading, progress, loading, connectionError, refresh, notify } = useDashboard()
   const assignmentsSeen = useSeenTracker('ntucool_seen_assignments')
   const examsSeen = useSeenTracker('ntucool_seen_exams')
+  const pdfGuessStatus = usePdfGuessStatus()
 
   return (
     <div className="wrap">
@@ -64,6 +66,8 @@ export default function App() {
             ok={state.ok}
             isNew={assignmentsSeen.isNew}
             onRowSeen={assignmentsSeen.markSeen}
+            isPdfGuessDone={pdfGuessStatus.isCompleted}
+            onTogglePdfGuess={pdfGuessStatus.toggle}
           />
           <AnnouncementHints
             title="課程首頁可能提到的作業"
