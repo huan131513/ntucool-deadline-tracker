@@ -44,11 +44,9 @@
 
 ## 使用說明(快速上手)
 
-**⚠️ 注意:核心功能(讀 Chrome cookie、抓 Canvas 資料、網頁面板)macOS / Windows 都能跑,但只有 macOS 有完整實測過的自動排程(`launchd`)。Windows 目前只支援下面的「手動模式」,還沒有對應的自動排程步驟,詳見下方 [Windows 版設定步驟](#windows-版設定步驟手動模式)。**
+**⚠️ 注意:目前只支援 macOS。**
 
 這**不是下載下來就能直接跑**的工具,每個人要在自己的電腦上照下面步驟設定一次,全部指令都在專案根目錄下執行。整個流程大約 10~15 分鐘,做完就能用網頁面板手動操作(不裝 Telegram、不設定自動排程也完全沒問題,見下方[系統限制](#系統限制))。
-
-下面是 **macOS** 版步驟;用 **Windows** 的話直接跳到 [Windows 版設定步驟](#windows-版設定步驟手動模式)。
 
 ### Step 0. 前置需求
 
@@ -94,9 +92,7 @@ cp config.example.json config.json
 
 在 Chrome 裡打開 https://cool.ntu.edu.tw 並登入(平常怎麼登入就怎麼登入),讓本機瀏覽器留著一個有效的 session。這一步之後,程式才能讀到有效的 cookie。
 
-順便看一眼你當前google帳號的編號：在網址輸入 `Chrome://version`，找到「設定檔路徑」 例如：	/Users/pengzihuan/Library/Application Support/Google/Chrome/Default
-
-如果最後是profile XX，則到本專案資料夾的config.json設定 "canvas_chrome_profile": "Profile XX"。
+如果之後抓不到 cookie,可能是 Chrome 裡有多個設定檔(Profile)——見下方[排查說明](#chrome預設推薦)。
 
 ### Step 4. Build 前端
 
@@ -121,133 +117,10 @@ python3 app.py
 
 如果想要「每小時自動檢查、快到期自動用 Telegram 推播提醒」,才需要往下看[第 5 節](#5-排程自動執行macos-launchd)設定 macOS `launchd`(僅支援 macOS)。
 
-## Windows 版設定步驟(手動模式)
-
-跟 macOS 版邏輯完全一樣(讀 Chrome cookie → 打 Canvas API → 網頁面板),只是指令語法換成 PowerShell,而且**目前沒有排程自動化**(`launchd` 是 macOS 專屬,Windows 要嘛用[工作排程器自己設定](#系統限制)每小時打 `/api/notify`,要嘛就跟這裡一樣純手動點按鈕)。
-
-### 這些指令要打在哪裡?
-
-下面每一段灰色的程式碼區塊,都是要打開一個叫 **PowerShell** 的黑底/藍底視窗,把整段貼進去、按 Enter 執行——不是打在瀏覽器或記事本裡。
-
-**打開 PowerShell 的方法(擇一):**
-
-- 按 **開始鍵**(⊞),直接打字 `powershell`,點第一個結果「Windows PowerShell」
-
-### Step 0. 前置需求
-
-需要 **Chrome 瀏覽器**(平常用它登入 NTUCOOL,這個要自己去官網裝)、**Python 3**、**Node.js**、**Git**(可選)。後面三個 Windows 10/11 都可以直接用內建的 `winget` 指令安裝,不用自己上網找安裝檔、按下一步:
-
-打開 PowerShell(見上面說明),整段貼上執行:
-```powershell
-winget install --id Python.Python.3.12 -e
-winget install --id OpenJS.NodeJS.LTS -e
-winget install --id Git.Git -e
-```
-每個套件安裝時都會跳出確認視窗,點**允許/是**即可。全部裝完後,**關掉這個 PowerShell 視窗、重新開一個新的**(這樣新裝的指令才會被系統認得到),貼上這段確認都裝好了:
-```powershell
-python --version
-node -v
-git --version
-```
-三行都要印出版本號,沒有印出來或出現「不是內部或外部命令」,代表對應那套件沒裝成功,重跑一次上面的 `winget install` 那一行。
-
-### Step 1. 下載專案、安裝 Python 套件
-
-> ⚠️ **先切到桌面或文件資料夾,不要留在原本開啟的位置**——用開始鍵搜尋打開的 PowerShell,預設會停在 `C:\Windows\System32`,這是系統保護資料夾,在裡面 `git clone`/建立虛擬環境常常會「看起來沒報錯,但其實什麼都沒建立成功」。貼這行先切過去:
-> ```powershell
-> cd $HOME\Desktop
-> ```
-
-```powershell
-git clone https://github.com/huan131513/ntucool-deadline-tracker.git
-cd ntucool-deadline-tracker
-```
-
-**在同一個 PowerShell 視窗繼續貼這段:**
-
-```powershell
-# 建立虛擬環境(資料夾 .venv 會在 repo 裡)
-python -m venv .venv
-
-# 啟動虛擬環境(開頭的 .\ 不能省略,不然 PowerShell 會誤判成要載入一個叫 .venv 的模組)
-.\.venv\Scripts\Activate.ps1
-
-# 如果上面那行說「不允許執行指令碼」,先跑這行放行(只影響目前這個 PowerShell 視窗),
-# 再重跑一次上面那行 .\.venv\Scripts\Activate.ps1:
-# Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# 安裝依賴
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# 之後要離開虛擬環境時
-# deactivate
-```
-
-執行成功的話,PowerShell 提示字元前面會多一個 `(.venv)` 字樣,代表虛擬環境已經啟動。
-
-### Step 2. 建立自己的設定檔
-
-```powershell
-copy config.example.json config.json
-```
-
-回到 **檔案總管**,打開專案資料夾,找到剛剛產生的 `config.json`,**右鍵 → 開啟檔案 → 記事本**(如果選單有「編輯」也可以直接點,一樣是記事本):
-- `canvas_auth_mode` 保持 `"chrome"` 就好,不用改
-- `telegram_bot_token` / `telegram_chat_id`:選配,留空也能用,詳見上方[第 2 節](#2-建立-telegram-bot選配)
-- `canvas_base_url`:不是台大才需要改
-
-改完記得 **Ctrl+S 存檔**,再關掉記事本。
-
-### Step 3. 用 Chrome 登入一次 NTUCOOL
-
-在 Chrome 打開 https://cool.ntu.edu.tw 並登入。如果之後抓不到 cookie,先看下方[「抓不到 cookie」那個可展開區塊](#chrome預設推薦)排查是不是 Chrome Profile 不對(`chrome://version` 那個方法,Windows/macOS 通用)。
-
-### Step 4. Build 前端
-
-```powershell
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
-### Step 5. 啟動,打開網頁面板
-
-```powershell
-python app.py
-```
-
-跑了之後**這個 PowerShell 視窗不會動、也不會跳新畫面出來,看起來像卡住,這是正常的**——它正在背景常駐執行,**不要關掉這個視窗**,只要它開著,網站就能用。
-
-打開瀏覽器,網址列輸入 `http://localhost:5050`,就會看到網頁面板,用法跟 macOS 版一樣(重新整理 / 發送 Telegram 通知)。
-
-不想用了的話,回到那個 PowerShell 視窗按 `Ctrl+C` 停掉,或直接把視窗關掉即可。下次要用,重新打開 PowerShell(記得先 `.\.venv\Scripts\Activate.ps1` 啟動虛擬環境)再跑一次 `python app.py` 就好,不用重新走一遍前面所有步驟。
-
-<details>
-<summary>Windows 上 Chrome cookie 讀不到、跳「需要系統管理員權限」?(點開看已知問題)</summary>
-
-較新版 Chrome(約 2024 年中之後)在 Windows 上加了一層叫 **App-Bound Encryption** 的保護機制,cookie 的解密金鑰綁定到 Chrome 自己的系統服務,舊版 `browser_cookie3` 可能因此讀取失敗,錯誤訊息類似:
-```
-This operation requires admin. Please run as admin.
-```
-
-**先試這個(最可能解決):**
-```powershell
-pip install --upgrade browser_cookie3
-```
-升級後新版套件通常能正確處理這個機制,不需要真的用系統管理員權限執行。
-
-**如果升級沒用:**
-1. 完全關閉 Chrome(工作管理員裡確認沒有殘留的 `chrome.exe` 行程)再重跑一次
-2. 改用 `"cookie"` 手動模式(見上方[說明](#cookie手動備援)),繞開這個相容性問題,代價是 cookie 每天要手動複製貼上一次
-
-</details>
-
 ## 系統限制
 
 - **只能在本機執行,無法部署到雲端**(Vercel、Render 等):`"chrome"` 認證模式是直接讀取本機 Chrome 的 cookie 資料庫,雲端環境沒有這份資料,詳見下方[取捨記錄](#為什麼是這個架構認證方式的取捨記錄)方案 5、7
-- **排程自動執行(`launchd`)僅支援 macOS**。Windows/Linux 沒有 `launchd`,若要在其他系統上自動排程,需要自行改用 Windows工作排程器/cron 之類的替代方案,或退回手動打開網頁面板按「重新整理」
+- **目前只支援 macOS**(讀 Chrome cookie 的機制、排程自動化 `launchd` 都是 macOS 專屬)
 - **必須本機裝有 Chrome、且平常有用它登入 NTUCOOL**,`"chrome"` 認證模式才抓得到有效 cookie；cookie 有效期由 NTUCOOL 伺服器決定,過期後需要重新登入一次 Chrome,程式不會、也不能自動幫你重新登入(不存密碼,見下方安全性備註)
 - **不是「下載即用」**,每個人都要建立自己的 `config.json`(內含各自的 Telegram bot token)並 build 一次前端,`.gitignore` 已排除這些個人設定與資料檔案
 - **考試資訊的準確度有限**:除了 Quizzes / Calendar Events 這種結構化資料,「公告關鍵字掃描」只是低信度的關鍵字比對提示,不保證正確,務必點進原始公告確認
